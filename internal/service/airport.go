@@ -19,11 +19,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// 手动同步和后台同步共用入口；串行执行，避免同一订阅并发删除和重建节点。
+// 手动同步、后台同步和删除共用同一把锁，避免删除期间重建订阅节点。
 var airportSubscriptionSyncMu sync.Mutex
 
-// DeleteAirportSubscription 删除关联的节点和订阅本身，并清理可能存在于内存中的测试废土
+// DeleteAirportSubscription 串行删除关联节点和订阅本身。
 func DeleteAirportSubscription(subID string) error {
+	airportSubscriptionSyncMu.Lock()
+	defer airportSubscriptionSyncMu.Unlock()
+
 	tx := database.DB.Begin()
 	// 1. 删除关联的节点
 	if err := tx.Where("sub_id = ?", subID).Delete(&database.AirportNode{}).Error; err != nil {

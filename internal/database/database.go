@@ -266,13 +266,13 @@ func (SysConfig) TableName() string {
 // AirportSub 机场订阅源表
 type AirportSub struct {
 	ID        string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
-	Name      string    `gorm:"type:varchar(64)" json:"name"` // 机场名称
-	URL       string    `gorm:"type:text" json:"url"`         // 订阅链接
-	Upload    int64     `gorm:"default:0" json:"upload"`      // 已用上行 (Bytes)
-	Download  int64     `gorm:"default:0" json:"download"`    // 已用下行 (Bytes)
-	Total     int64     `gorm:"default:0" json:"total"`       // 总流量 (Bytes)
-	Expire    int64     `gorm:"default:0" json:"expire"`      // 到期时间戳
-	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+	Name      string    `gorm:"type:varchar(64)" json:"name"`                             // 机场名称
+	URL       string    `gorm:"type:text" json:"url"`                                     // 订阅链接
+	Upload    int64     `gorm:"default:0" json:"upload"`                                  // 已用上行 (Bytes)
+	Download  int64     `gorm:"default:0" json:"download"`                                // 已用下行 (Bytes)
+	Total     int64     `gorm:"default:0" json:"total"`                                   // 总流量 (Bytes)
+	Expire    int64     `gorm:"default:0" json:"expire"`                                  // 到期时间戳
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime:false" json:"updated_at"` // 仅成功同步时显式更新
 }
 
 func (AirportSub) TableName() string {
