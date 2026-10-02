@@ -30,8 +30,21 @@ type renderedClashConfig struct {
 		Proxies []string `yaml:"proxies"`
 		Use     []string `yaml:"use"`
 	} `yaml:"proxy-groups"`
+	Tun struct {
+		Enable      bool     `yaml:"enable"`
+		StrictRoute bool     `yaml:"strict-route"`
+		DNSHijack   []string `yaml:"dns-hijack"`
+	} `yaml:"tun"`
+	RuleProviders map[string]struct {
+		URL      string `yaml:"url"`
+		Behavior string `yaml:"behavior"`
+		Format   string `yaml:"format"`
+	} `yaml:"rule-providers"`
 	DNS struct {
 		IPv6                  bool              `yaml:"ipv6"`
+		RespectRules          bool              `yaml:"respect-rules"`
+		UseSystemHosts        bool              `yaml:"use-system-hosts"`
+		FakeIPRange6          string            `yaml:"fake-ip-range6"`
 		EnhancedMode          string            `yaml:"enhanced-mode"`
 		FakeIPRange           string            `yaml:"fake-ip-range"`
 		DirectNameserver      []string          `yaml:"direct-nameserver"`
@@ -153,8 +166,14 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		t.Fatal("legacy default proxy MATCH rule is present")
 	}
 
-	if config.DNS.EnhancedMode != "fake-ip" || config.DNS.FakeIPRange != "198.18.0.1/16" {
-		t.Fatalf("unexpected DNS fake-ip config: mode=%q range=%q", config.DNS.EnhancedMode, config.DNS.FakeIPRange)
+	if !config.Tun.Enable || !config.Tun.StrictRoute || len(config.Tun.DNSHijack) < 2 {
+		t.Fatalf("TUN DNS interception is not enforced: %#v", config.Tun)
+	}
+	if config.DNS.EnhancedMode != "fake-ip" || config.DNS.FakeIPRange != "198.18.0.1/16" || config.DNS.FakeIPRange6 != "fdfe:dcba:9876::1/64" {
+		t.Fatalf("unexpected DNS fake-ip config: mode=%q range4=%q range6=%q", config.DNS.EnhancedMode, config.DNS.FakeIPRange, config.DNS.FakeIPRange6)
+	}
+	if !config.DNS.RespectRules || config.DNS.UseSystemHosts {
+		t.Fatalf("DNS routing enforcement not enabled: respect-rules=%v use-system-hosts=%v", config.DNS.RespectRules, config.DNS.UseSystemHosts)
 	}
 	if len(config.DNS.DirectNameserver) != 0 || len(config.DNS.NameserverPolicy) != 0 {
 		t.Fatalf("client DNS must not use split/direct resolver paths: direct=%v policy=%v", config.DNS.DirectNameserver, config.DNS.NameserverPolicy)
@@ -173,17 +192,25 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	if _, exists := groupByName["DNS连接"]; exists {
 		t.Fatal("legacy independent DNS连接 group must be removed")
 	}
-	var dotRuleFound bool
+	dohProvider, ok := config.RuleProviders["DoH_域"]
+	if !ok || !strings.Contains(dohProvider.URL, "category-doh.mrs") {
+		t.Fatalf("DoH blocking provider missing or invalid: %#v", dohProvider)
+	}
+	var dotBlocked bool
+	var dohBlocked bool
 	for _, rule := range config.Rules {
-		if rule == "DST-PORT,853,总模式" {
-			dotRuleFound = true
+		if rule == "DST-PORT,853,⛔️ 拒绝连接" {
+			dotBlocked = true
+		}
+		if rule == "RULE-SET,DoH_域,⛔️ 拒绝连接" {
+			dohBlocked = true
 		}
 		if strings.Contains(rule, "DNS连接") {
 			t.Fatalf("legacy DNS连接 rule still present: %q", rule)
 		}
 	}
-	if !dotRuleFound {
-		t.Fatal("DoT traffic must follow 总模式")
+	if !dotBlocked || !dohBlocked {
+		t.Fatalf("encrypted DNS bypass is not blocked: DoT=%v DoH=%v", dotBlocked, dohBlocked)
 	}
 }
 
