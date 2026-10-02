@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.6
+  VERSION: v0.4.76-custom.7
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.6' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.6' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.6' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,18 +135,16 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.6
-            - 强制启用 TUN DNS 接管并保持 strict-route
-            - DNS 开启 respect-rules，关闭 system hosts 参与
-            - 增加 IPv6 Fake-IP 网段 fdfe:dcba:9876::1/64
-            - proxy-server-nameserver 改为 Cloudflare / Google DoH，移除中国 bootstrap DNS
-            - 新增 category-doh 规则并阻断浏览器/系统自行发起的 DoH
-            - 阻断 DoT 853 与常见公共 DNS IP 的外部连接，避免绕过 Mihomo 内部 DNS
-            - 普通 A/AAAA 查询继续通过 1.1.1.1 / 8.8.8.8 并绑定总模式
-            - 保留 custom.5 的 Fake-IP 网段修复与 custom.4 的中转/机场自动更新
+            ### v0.4.76-custom.7
+            - 回滚 custom.5/custom.6 的强制 DNS/TUN 注入
+            - 生成的 Clash/Mihomo 订阅不再包含 dns: 与 tun: 段
+            - 删除 DNS_Hijack、DoH_域、53/853 强制规则及公共 DNS IP 拦截
+            - DNS 与 TUN 完全交由 Mihomo Party / 客户端自身管理，行为对齐已验证不泄漏的个人配置
+            - 保留 custom.4 的总模式、中转策略、地区策略与机场 6 小时自动同步
+            - 中转/落地 provider 及 dialer-proxy 逻辑保持不变
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.6`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.7`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -157,7 +155,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.6' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest
