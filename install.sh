@@ -109,14 +109,18 @@ install_deps() {
 # ========== 获取最新版本号 ==========
 get_latest_version() {
     local channel="$1"
-    local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
     local version=""
 
     if [ "$channel" = "stable" ]; then
-        # 稳定版：获取最新的非预发布版本
-        version=$(curl -fsSL "${api_url}/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        # 稳定版：跟随 Releases 页面重定向，从最终 /tag/{version} 地址提取版本。
+        local release_url
+        release_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null)
+        case "$release_url" in
+            */releases/tag/*) version="${release_url##*/}" ;;
+        esac
     else
-        # 开发版（alpha）：获取最新的预发布版本
+        # Alpha 需要筛选多个预发布版本，保留独立的 releases API 路径。
+        local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
         version=$(curl -fsSL "${api_url}" 2>/dev/null | grep '"tag_name"' | grep -i 'alpha' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
     fi
 
@@ -522,12 +526,17 @@ do_restart() {
 # ========== 获取最新版本号 ==========
 get_latest_version() {
     local channel="$1"
-    local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
     local version=""
 
     if [ "$channel" = "stable" ]; then
-        version=$(curl -fsSL "${api_url}/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        # 稳定版：跟随 Releases 页面重定向，从最终 /tag/{version} 地址提取版本。
+        local release_url
+        release_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null)
+        case "$release_url" in
+            */releases/tag/*) version="${release_url##*/}" ;;
+        esac
     else
+        local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases"
         version=$(curl -fsSL "${api_url}" 2>/dev/null | grep '"tag_name"' | grep -i 'alpha' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
     fi
 

@@ -76,7 +76,7 @@
     },
     {
       "name": "加密货币",
-      "icon": "💱",
+      "icon": "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg",
       "domain_url": "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-cryptocurrency.mrs"
     },
     {
