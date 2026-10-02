@@ -38,7 +38,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=v0.4.76-custom.7'" \
+          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=v0.4.76-custom.8'" \
             -o "bin/nodectl-linux-${GOARCH}" ./main.go
 
       - name: Upload binary

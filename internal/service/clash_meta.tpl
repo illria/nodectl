@@ -1,29 +1,3 @@
-mixed-port: 7890
-redir-port: 7891
-tproxy-port: 1536
-ipv6: true
-mode: Rule
-allow-lan: true
-disable-keep-alive: true
-geodata-mode: true
-geo-auto-update: true
-geo-update-interval: 24
-geox-url:
-  asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
-experimental:
-  http-headers:
-    request:
-      - name: "User-Agent"
-        value: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36"
-      - name: "Accept-Language"
-        value: "en-US,en;q=0.9"
-unified-delay: true
-tcp-concurrent: true
-log-level: silent
-find-process-mode: always
-global-client-fingerprint: chrome
-
-# -------------------- 订阅提供商 --------------------
 proxy-providers:
   中转机场:
     type: http
@@ -34,6 +8,8 @@ proxy-providers:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
+    override:
+      udp: true
   落地机场:
     type: http
     interval: {{.ProxiesInterval}}
@@ -44,34 +20,9 @@ proxy-providers:
       url: https://www.gstatic.com/generate_204
       interval: 300
     override:
+      udp: true
       dialer-proxy: '💠 中转策略'
       skip-proxy: false
-
-profile:
-  store-selected: true
-  store-fake-ip: true
-
-# -------------------- 嗅探与网卡模块 --------------------
-sniffer:
-  enable: true
-  force-dns-mapping: true
-  parse-pure-ip: true
-  override-destination: true
-  sniff:
-    HTTP:
-      ports: [80, 8080-8880]
-    TLS:
-      ports: [443, 5228, 8443]
-    QUIC:
-      ports: [443, 8443]
-  force-domain:
-    - "+.v2ex.com"
-  skip-domain:
-    - "Mijia Cloud"
-
-
-# DNS / TUN are intentionally not emitted here.
-# Mobile clients such as Mihomo Party manage their own tunnel and resolver stack.
 
 proxies:
     - {name: 🇨🇳 大陆, type: direct, udp: true}
@@ -80,45 +31,46 @@ proxies:
 
 # -------------------- 软件策略通用选项 --------------------
 # 软件模块可以选择总模式、手动/地区策略或直连/拒绝，不引用自身或 GLOBAL。
-proxy_groups: &proxy_groups
-  type: select
-  proxies:
-    - 总模式
-    - 手动选择
-    - 香港地区
-    - 香港自动
-    - 日本地区
-    - 日本自动
-    - 新加坡地区
-    - 新加坡自动
-    - 美国地区
-    - 美国自动
-    - 英国地区
-    - 英国自动
-    - 德国地区
-    - 德国自动
-    - 台湾地区
-    - 台湾自动
-    - 韩国地区
-    - 韩国自动
-    - 荷兰地区
-    - 荷兰自动
-    - 波兰地区
-    - 波兰自动
-    - 摩尔多瓦地区
-    - 摩尔多瓦自动
-    - 芬兰地区
-    - 芬兰自动
-    - 印度地区
-    - 印度自动
-    - 泰国地区
-    - 泰国自动
-    - 法国地区
-    - 法国自动
-    - 中国大陆地区
-    - 中国大陆自动
-    - 🇨🇳 大陆
-    - ⛔️ 拒绝连接
+{{define "softwareOptions"}}
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+{{end}}
 
 # -------------------- 策略组自动生成 --------------------
 # 客户端策略组顺序：总模式、中转、手动、软件模块、地区/自动成对、辅助组。
@@ -181,7 +133,7 @@ proxy-groups:
   {{if ne .Type "reject"}}
   - name: {{.Name}}
     {{if eq .Name "加密货币"}}icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg"{{else if .Icon}}icon: "{{.Icon}}"{{end}}
-    <<: *proxy_groups
+{{template "softwareOptions"}}
   {{end}}
 {{end}}
 
@@ -512,82 +464,64 @@ proxy-groups:
       - 🇨🇳 大陆
       - 总模式
 
-  - name: 漏网之鱼
-    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/HBASE-copy.svg"
-    <<: *proxy_groups
-
 {{range .CustomProxies}}
   - name: {{.Name}}
     icon: "{{if .Icon}}{{.Icon}}{{else}}https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/User.svg{{end}}"
-    <<: *proxy_groups
+{{template "softwareOptions"}}
 {{end}}
-
-# -------------------- 规则集行为锚点 --------------------
-rule-anchor:
-  Local: &Local
-    {type: file, behavior: classical, format: text}
-  Classical: &Classical
-    {type: http, behavior: classical, format: text, interval: {{.PublicRulesInterval}}}
-  IPCIDR: &IPCIDR
-    {type: http, behavior: ipcidr, format: mrs, interval: {{.PublicRulesInterval}}}
-  Domain: &Domain
-    {type: http, behavior: domain, format: mrs, interval: {{.PublicRulesInterval}}}
 
 # -------------------- 规则集自动挂载 --------------------
 rule-providers:
   我的直连规则:
-    <<: *Classical
+    type: http
+    behavior: classical
+    format: text
     interval: {{.RulesInterval}}
     url: "{{.BaseURL}}/sub/rules/direct?token={{.Token}}"
     path: ./rules/direct.list
 
 {{range .CustomProxies}}
   {{.Name}}_自定义分流:
-    <<: *Classical
+    type: http
+    behavior: classical
+    format: text
     interval: {{$.RulesInterval}}
     url: "{{$.BaseURL}}/sub/rules/proxy/{{.ID}}?token={{$.Token}}"
     path: ./rules/{{.Name}}_Custom.list
 {{end}}
 
   WebRTC_端/域:
-    <<: *Classical
+    type: http
+    behavior: classical
+    format: text
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/WebRTC.list
     url: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/rules/WebRTC.list"
-
-  CN_IP:
-    <<: *IPCIDR
-    path: ./rules/CN_IP.mrs
-    url: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.mrs"
-  CN_域:
-    <<: *Domain
-    path: ./rules/CN_域.mrs
-    url: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.mrs"
-
-  Private_域:
-    <<: *Domain
-    path: ./rules/LAN.mrs
-    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Lan/Lan_OCD_Domain.mrs"
-  Private_IP:
-    <<: *IPCIDR
-    path: ./rules/Private_IP.mrs
-    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Lan/Lan_OCD_IP.mrs"
 
 {{range .ActiveModules}}
   {{if .DomainURL}}
   {{.Name}}_域:
-    <<: *Domain
+    type: http
+    behavior: domain
+    format: mrs
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/{{.Name}}_Domain.mrs
     url: "{{.DomainURL}}"
   {{end}}
   {{if .IPURL}}
   {{.Name}}_IP:
-    <<: *IPCIDR
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/{{.Name}}_IP.mrs
     url: "{{.IPURL}}"
   {{end}}
   {{if .URL}}
   {{.Name}}_用户自定义:
-    <<: *Classical
+    type: http
+    behavior: classical
+    format: text
     interval: {{$.RulesInterval}}
     path: ./rules/{{.Name}}_User_Custom.yaml
     url: "{{.URL}}"
@@ -597,27 +531,27 @@ rule-providers:
 # -------------------- 路由规则分发 --------------------
 rules:
   # 与个人配置保持一致：优先阻断常见 STUN/WebRTC 端口与关键字。
-  - DST-PORT,3478,⛔️ 拒绝连接
-  - DST-PORT,5349,⛔️ 拒绝连接
-  - DST-PORT,19302,⛔️ 拒绝连接
-  - DST-PORT,19305,⛔️ 拒绝连接
-  - DST-PORT,19307,⛔️ 拒绝连接
-  - DST-PORT,19308,⛔️ 拒绝连接
-  - DOMAIN-KEYWORD,stun,⛔️ 拒绝连接
+  - DST-PORT,3478,REJECT
+  - DST-PORT,5349,REJECT
+  - DST-PORT,19302,REJECT
+  - DST-PORT,19305,REJECT
+  - DST-PORT,19307,REJECT
+  - DST-PORT,19308,REJECT
+  - DOMAIN-KEYWORD,stun,REJECT
 
   # 本地/私网保持直连。
-  - IP-CIDR,127.0.0.0/8,🇨🇳 大陆,no-resolve
-  - IP-CIDR,10.0.0.0/8,🇨🇳 大陆,no-resolve
-  - IP-CIDR,172.16.0.0/12,🇨🇳 大陆,no-resolve
-  - IP-CIDR,192.168.0.0/16,🇨🇳 大陆,no-resolve
-  - DOMAIN-SUFFIX,local,🇨🇳 大陆
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,local,DIRECT
 
-  - RULE-SET,我的直连规则,🇨🇳 大陆
-  - RULE-SET,WebRTC_端/域,⛔️ 拒绝连接
+  - RULE-SET,我的直连规则,DIRECT
+  - RULE-SET,WebRTC_端/域,REJECT
 
 {{range .ActiveModules}}
   {{if eq .Type "reject"}}
-  {{$target := "⛔️ 拒绝连接"}}
+  {{$target := "REJECT"}}
   {{range .ExtraRules}}
   - {{.}},{{$target}}
   {{end}}
@@ -654,9 +588,6 @@ rules:
   {{end}}
 {{end}}
 
-  - DOMAIN,browserleaks.com,漏网之鱼
-  - RULE-SET,CN_域,🇨🇳 大陆
-  - RULE-SET,CN_IP,🇨🇳 大陆
-  - RULE-SET,Private_域,🇨🇳 大陆
-  - RULE-SET,Private_IP,🇨🇳 大陆
+  - GEOSITE,CN,DIRECT
+  - GEOIP,CN,DIRECT,no-resolve
   - MATCH,总模式

@@ -7,12 +7,13 @@ on:
       - fix/dns-egress-v5
       - fix/dns-enforcement-v6
       - fix/client-managed-dns-v7
+      - fix/minimal-profile-v8
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.7
+  VERSION: v0.4.76-custom.8
   AGENT_VERSION: v0.2.77
 
 concurrency:
