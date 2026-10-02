@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.5`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前准备版本：**`v0.4.76-custom.6`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -91,7 +91,7 @@ NodeCtl 内置了强大的 Clash Meta 分流配置系统：
 - **自定义分流组**：支持创建自定义代理组，自由配置域名、IP、进程规则
 - **可视化规则编辑**：无需手写 YAML，可视化界面轻松添加直连/代理规则
 - **GeoIP/Geosite 集成**：自动加载 MetaCubeX 维护的 mrs 规则集，国内外智能分流
-- **DNS 跟随总模式**：客户端普通 DNS 的 IPv4/IPv6 解析统一跟随总模式，避免 DNS 出口与业务出口分离
+- **强制 DNS 接管**：TUN 劫持 53、阻断外部 DoH/DoT，并让 Mihomo 内部 DNS 的 IPv4/IPv6 解析统一跟随总模式
 - **更新间隔可配置**：订阅、规则集更新频率均可自定义
 
 ![Clash分流配置](https://nodectl-ipopt.hobin.net/Image/clash分流1.webp)
@@ -138,7 +138,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.5`；当前稳定版为 `v0.4.76-custom.5`。
+> 当前准备版本为 `v0.4.76-custom.6`；当前稳定版为 `v0.4.76-custom.6`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -147,7 +147,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.5
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.6
 ```
 
 启动：
@@ -162,7 +162,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.5
+  ghcr.io/illria/nodectl:v0.4.76-custom.6
 ```
 
 访问：
@@ -190,7 +190,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.5
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.6
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -277,7 +277,7 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.5 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.6 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -287,14 +287,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.5
+  ghcr.io/illria/nodectl:v0.4.76-custom.6
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.5` |
+| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.6` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |
