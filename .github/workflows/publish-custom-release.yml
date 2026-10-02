@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.7
+  VERSION: v0.4.76-custom.8
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,16 +135,18 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.7
-            - 回滚 custom.5/custom.6 的强制 DNS/TUN 注入
-            - 生成的 Clash/Mihomo 订阅不再包含 dns: 与 tun: 段
-            - 删除 DNS_Hijack、DoH_域、53/853 强制规则及公共 DNS IP 拦截
-            - DNS 与 TUN 完全交由 Mihomo Party / 客户端自身管理，行为对齐已验证不泄漏的个人配置
-            - 保留 custom.4 的总模式、中转策略、地区策略与机场 6 小时自动同步
-            - 中转/落地 provider 及 dialer-proxy 逻辑保持不变
+            ### v0.4.76-custom.8
+            - 根据已验证不泄漏的 Mihomo Party 配置重构为 Minimal Profile
+            - 删除 mixed-port / redir-port / tproxy-port / ipv6 / mode / allow-lan 等运行时字段
+            - 删除 geodata / experimental / profile / sniffer 等客户端运行时覆盖
+            - 继续不下发 dns: 与 tun:
+            - 删除 proxy_groups / rule-anchor 这类非必要顶层辅助键，改由模板展开
+            - STUN/WebRTC、私网与 CN 规则写法对齐已验证工作配置：REJECT / DIRECT / GEOSITE / GEOIP
+            - 删除 browserleaks 特殊规则和额外 CN/Private rule-provider
+            - 保留总模式、中转策略、地区策略、机场自动更新与落地 dialer-proxy
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.7`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.8`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -155,7 +157,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.7' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest
