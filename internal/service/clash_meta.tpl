@@ -559,7 +559,7 @@ rules:
   - RULE-SET,{{.Name}}_域,{{$target}}
   {{end}}
   {{if .IPURL}}
-  - RULE-SET,{{.Name}}_IP,{{$target}}
+  - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
   - RULE-SET,{{.Name}}_用户自定义,{{$target}}
@@ -580,7 +580,7 @@ rules:
   - RULE-SET,{{.Name}}_域,{{$target}}
   {{end}}
   {{if .IPURL}}
-  - RULE-SET,{{.Name}}_IP,{{$target}}
+  - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
   - RULE-SET,{{.Name}}_用户自定义,{{$target}}
