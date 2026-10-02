@@ -67,7 +67,7 @@ func TestCustom9StagingWorkflowBoundaries(t *testing.T) {
 			t.Errorf("branch validation must reject wrong refs: missing %q", required)
 		}
 	}
-	uploads, dockerPushes, checkouts := 0, 0, 0
+	uploads, dockerPushes, checkouts, panelDownloads, agentDownloads := 0, 0, 0, 0, 0
 	for id, job := range workflow.Jobs {
 		if _, override := job.Env["STAGING_IMAGE"]; override {
 			t.Errorf("job %s must not override the staging-only Docker tag", id)
@@ -114,9 +114,27 @@ func TestCustom9StagingWorkflowBoundaries(t *testing.T) {
 				if step.With["name"] != wantName || step.With["path"] != "bin/"+wantName {
 					t.Errorf("job %s staging artifact name/path = %v", id, step.With)
 				}
+			case strings.HasPrefix(step.Uses, "actions/download-artifact@"):
+				if id != "stage-image" || step.Uses != "actions/download-artifact@v4" || fmt.Sprint(step.With["merge-multiple"]) != "true" {
+					t.Errorf("only the staging image job may download this run's binary artifacts: %v", step.With)
+				}
+				switch step.With["path"] {
+				case "bin":
+					panelDownloads++
+					if step.With["pattern"] != "nodectl-linux-*" {
+						t.Errorf("staging panel artifact pattern = %v", step.With["pattern"])
+					}
+				case "staging-agents":
+					agentDownloads++
+					if step.With["pattern"] != "nodectl-agent-linux-*-${{ env.AGENT_VERSION }}" {
+						t.Errorf("staging Agent artifact pattern = %v", step.With["pattern"])
+					}
+				default:
+					t.Errorf("unexpected staging artifact destination = %v", step.With["path"])
+				}
 			case strings.HasPrefix(step.Uses, "docker/build-push-action@"):
 				dockerPushes++
-				if id != "stage-image" || step.With["tags"] != "${{ env.STAGING_IMAGE }}" || fmt.Sprint(step.With["push"]) != "true" || step.With["platforms"] != "linux/amd64,linux/arm64" {
+				if id != "stage-image" || step.With["file"] != ".github/Dockerfile.staging" || step.With["tags"] != "${{ env.STAGING_IMAGE }}" || fmt.Sprint(step.With["push"]) != "true" || step.With["platforms"] != "linux/amd64,linux/arm64" {
 					t.Errorf("staging Docker push must only publish the multiarch RC tag: %v", step.With)
 				}
 			}
@@ -127,8 +145,31 @@ func TestCustom9StagingWorkflowBoundaries(t *testing.T) {
 			}
 		}
 	}
-	if uploads != 2 || dockerPushes != 1 || checkouts != 3 {
-		t.Errorf("staging needs both binary matrices and one Docker push from immutable checkouts: uploads=%d docker=%d checkouts=%d", uploads, dockerPushes, checkouts)
+	if uploads != 2 || dockerPushes != 1 || checkouts != 3 || panelDownloads != 1 || agentDownloads != 1 {
+		t.Errorf("staging needs both binary matrices and one Docker push from immutable checkouts: uploads=%d docker=%d checkouts=%d panel_downloads=%d agent_downloads=%d",
+			uploads, dockerPushes, checkouts, panelDownloads, agentDownloads)
+	}
+	stagingDockerfile, err := os.ReadFile("../../.github/Dockerfile.staging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"COPY --chmod=755 ./bin/nodectl-linux-${TARGETARCH} /app/nodectl",
+		"/app/staging-agents/nodectl-agent-linux-amd64-v0.2.78-rc",
+		"/app/staging-agents/nodectl-agent-linux-arm64-v0.2.78-rc",
+		"RUN test -x /app/nodectl",
+		"ENV NODECTL_STAGING_AGENT_DIR=/app/staging-agents",
+	} {
+		if !strings.Contains(string(stagingDockerfile), required) {
+			t.Errorf("staging image missing %q", required)
+		}
+	}
+	productionDockerfile, err := os.ReadFile("../../.github/Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(productionDockerfile), "staging-agents") || strings.Contains(string(productionDockerfile), "NODECTL_STAGING_AGENT_DIR") {
+		t.Fatal("production Dockerfile must not bundle RC Agent binaries")
 	}
 }
 

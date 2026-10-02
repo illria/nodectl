@@ -153,8 +153,22 @@ jobs:
           path: bin
           merge-multiple: true
 
+      - name: Download Linux agent binaries from this run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nodectl-agent-linux-*-${{ env.AGENT_VERSION }}
+          path: staging-agents
+          merge-multiple: true
+
       - name: Make binaries executable
-        run: chmod +x bin/nodectl-linux-amd64 bin/nodectl-linux-arm64
+        run: |
+          test -s bin/nodectl-linux-amd64
+          test -s bin/nodectl-linux-arm64
+          test -s staging-agents/nodectl-agent-linux-amd64-${AGENT_VERSION}
+          test -s staging-agents/nodectl-agent-linux-arm64-${AGENT_VERSION}
+          chmod +x bin/nodectl-linux-amd64 bin/nodectl-linux-arm64 \
+            staging-agents/nodectl-agent-linux-amd64-${AGENT_VERSION} \
+            staging-agents/nodectl-agent-linux-arm64-${AGENT_VERSION}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -176,7 +190,7 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
-          file: .github/Dockerfile
+          file: .github/Dockerfile.staging
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.STAGING_IMAGE }}

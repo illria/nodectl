@@ -144,6 +144,8 @@ Agent v0.2.78 将链配置保存到 `/var/lib/nodectl-agent/chains.json`，重�
 
 运行提供 1 天有效的四个 artifacts：`nodectl-linux-amd64`、`nodectl-linux-arm64`、`nodectl-agent-linux-amd64-v0.2.78-rc`、`nodectl-agent-linux-arm64-v0.2.78-rc`，并只推送临时 Docker tag `ghcr.io/illria/nodectl:custom9-rc`。Staging 不创建 Release 或 git tag，不覆盖正式 Docker tags。
 
+临时 Docker 镜像内置两个 RC Agent，设置 `NODECTL_STAGING_AGENT_DIR=/app/staging-agents`。只有精确的 `v0.4.76-custom.9-rc` 面板在该目录存在时，安装脚本的 `/api/public/download/agent` 请求才从镜像内分发 `v0.2.78-rc`；文件缺失会报错。正式版本继续从 GitHub Release 查找 Agent。
+
 ---
 
 ## 🚀 三分钟快速部署

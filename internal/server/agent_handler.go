@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -111,8 +113,8 @@ func apiAgentInitConfig(w http.ResponseWriter, r *http.Request) {
 // GET /api/public/download/agent?arch={amd64|arm64}&channel={stable|alpha}
 // 安装脚本通过此接口下载与面板版本匹配的 Agent 二进制
 //
-// 核心逻辑：读取 GitHub Release 页面并匹配 agent 文件名，避免依赖 GitHub API
-// 配额，也避免面板版本号与 agent 版本号不一致导致 404 错误。
+// RC Docker 使用镜像内的 Agent；其他版本从 GitHub Release 页面查找。
+// Release 查找不依赖 GitHub API，也不假设面板与 Agent 的版本号相同。
 func apiDownloadAgent(w http.ResponseWriter, r *http.Request) {
 	arch := strings.TrimSpace(r.URL.Query().Get("arch"))
 	if arch == "" {
@@ -121,6 +123,12 @@ func apiDownloadAgent(w http.ResponseWriter, r *http.Request) {
 	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
 	if channel == "" {
 		channel = string(version.GetChannel())
+	}
+	if version.Version == "v0.4.76-custom.9-rc" {
+		if dir := strings.TrimSpace(os.Getenv("NODECTL_STAGING_AGENT_DIR")); dir != "" {
+			serveStagingAgent(w, r, dir, arch)
+			return
+		}
 	}
 
 	// 验证架构参数
@@ -161,6 +169,37 @@ func apiDownloadAgent(w http.ResponseWriter, r *http.Request) {
 
 	// 重定向到 GitHub Release
 	http.Redirect(w, r, downloadURL, http.StatusFound)
+}
+
+// Only fixed server-selected file names can be served from the staging image.
+// A missing RC artifact is an error; it must never fall back to a stable Agent.
+func serveStagingAgent(w http.ResponseWriter, r *http.Request, dir, arch string) {
+	var filename string
+	switch arch {
+	case "amd64":
+		filename = "nodectl-agent-linux-amd64-v0.2.78-rc"
+	case "arm64":
+		filename = "nodectl-agent-linux-arm64-v0.2.78-rc"
+	default:
+		http.Error(w, "invalid staging agent arch, must be amd64 or arm64", http.StatusBadRequest)
+		return
+	}
+
+	file, err := os.Open(filepath.Join(dir, filename))
+	if err != nil {
+		http.Error(w, "staging agent artifact unavailable", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.Error(w, "staging agent artifact unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeContent(w, r, filename, info.ModTime(), file)
 }
 
 // ============================================================

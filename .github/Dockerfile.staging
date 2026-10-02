@@ -1,0 +1,19 @@
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates tzdata
+WORKDIR /app
+
+ARG TARGETARCH
+COPY --chmod=755 ./bin/nodectl-linux-${TARGETARCH} /app/nodectl
+COPY --chmod=755 ./staging-agents/nodectl-agent-linux-amd64-v0.2.78-rc /app/staging-agents/nodectl-agent-linux-amd64-v0.2.78-rc
+COPY --chmod=755 ./staging-agents/nodectl-agent-linux-arm64-v0.2.78-rc /app/staging-agents/nodectl-agent-linux-arm64-v0.2.78-rc
+
+# Check both bundled Agents in each architecture's image without starting them.
+RUN test -x /app/nodectl && \
+    test -x /app/staging-agents/nodectl-agent-linux-amd64-v0.2.78-rc && \
+    test -x /app/staging-agents/nodectl-agent-linux-arm64-v0.2.78-rc
+
+ENV NODECTL_STAGING_AGENT_DIR=/app/staging-agents
+VOLUME ["/app/data"]
+EXPOSE 8080
+ENTRYPOINT ["/app/nodectl"]
