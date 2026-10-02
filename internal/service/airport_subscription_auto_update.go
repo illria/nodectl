@@ -17,7 +17,44 @@ const (
 	maxAirportAutoUpdateMins     = 10080
 )
 
-var airportSubscriptionAutoUpdateOnce sync.Once
+var (
+	airportSubscriptionAutoUpdateOnce  sync.Once
+	airportSubscriptionAutoUpdateRunMu sync.Mutex
+	airportAutoAttempts                = &airportAutoAttemptState{lastAttemptBySub: make(map[string]time.Time)}
+)
+
+type airportAutoAttemptState struct {
+	mu               sync.Mutex
+	lastAttemptBySub map[string]time.Time
+}
+
+func airportAutoUpdateDue(updatedAt, lastAutoAttempt, now time.Time, interval time.Duration) bool {
+	lastActivity := updatedAt
+	if lastAutoAttempt.After(lastActivity) {
+		lastActivity = lastAutoAttempt
+	}
+	return lastActivity.IsZero() || !now.Before(lastActivity.Add(interval))
+}
+
+func (s *airportAutoAttemptState) isDue(sub database.AirportSub, now time.Time, interval time.Duration) bool {
+	s.mu.Lock()
+	lastAutoAttempt := s.lastAttemptBySub[sub.ID]
+	s.mu.Unlock()
+	return airportAutoUpdateDue(sub.UpdatedAt, lastAutoAttempt, now, interval)
+}
+
+func (s *airportAutoAttemptState) beginAttempt(sub database.AirportSub, now time.Time, interval time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !airportAutoUpdateDue(sub.UpdatedAt, s.lastAttemptBySub[sub.ID], now, interval) {
+		return false
+	}
+	if s.lastAttemptBySub == nil {
+		s.lastAttemptBySub = make(map[string]time.Time)
+	}
+	s.lastAttemptBySub[sub.ID] = now
+	return true
+}
 
 // StartAirportSubscriptionAutoUpdate starts the serialized subscription sync loop once.
 func StartAirportSubscriptionAutoUpdate() {
@@ -36,6 +73,9 @@ func StartAirportSubscriptionAutoUpdate() {
 }
 
 func runAirportSubscriptionAutoUpdate() {
+	airportSubscriptionAutoUpdateRunMu.Lock()
+	defer airportSubscriptionAutoUpdateRunMu.Unlock()
+
 	if database.DB == nil {
 		logger.Log.Warn("机场订阅自动同步跳过：数据库未初始化")
 		return
@@ -52,18 +92,36 @@ func runAirportSubscriptionAutoUpdate() {
 		return
 	}
 
-	now := time.Now()
+	syncDueAirportSubscriptions(subs, interval, airportAutoAttempts, time.Now, SyncAirportSubscription, time.Sleep)
+}
+
+// syncDueAirportSubscriptions records each automatic attempt before syncing, including failed attempts.
+func syncDueAirportSubscriptions(
+	subs []database.AirportSub,
+	interval time.Duration,
+	attempts *airportAutoAttemptState,
+	now func() time.Time,
+	syncSub func(string) error,
+	sleep func(time.Duration),
+) (attempted, success, failed int) {
+	checkedAt := now()
 	due := make([]database.AirportSub, 0, len(subs))
 	for _, sub := range subs {
-		if sub.UpdatedAt.IsZero() || now.Sub(sub.UpdatedAt) >= interval {
+		if attempts.isDue(sub, checkedAt, interval) {
 			due = append(due, sub)
 		}
 	}
+	if len(due) == 0 {
+		return 0, 0, 0
+	}
 
-	logger.Log.Info("开始自动同步机场订阅", "due", len(due), "interval_minutes", intervalMinutes)
-	success, failed := 0, 0
+	logger.Log.Info("开始自动同步机场订阅", "due", len(due), "interval_minutes", int(interval/time.Minute))
 	for i, sub := range due {
-		if err := SyncAirportSubscription(sub.ID); err != nil {
+		if !attempts.beginAttempt(sub, now(), interval) {
+			continue
+		}
+		attempted++
+		if err := syncSub(sub.ID); err != nil {
 			failed++
 			logger.Log.Error("机场订阅自动同步失败", "id", sub.ID, "name", sub.Name, "error", err)
 		} else {
@@ -71,10 +129,11 @@ func runAirportSubscriptionAutoUpdate() {
 			logger.Log.Info("机场订阅自动同步成功", "id", sub.ID, "name", sub.Name)
 		}
 		if i < len(due)-1 {
-			time.Sleep(3 * time.Second)
+			sleep(3 * time.Second)
 		}
 	}
 	logger.Log.Info("机场订阅自动同步完成", "success", success, "failed", failed)
+	return attempted, success, failed
 }
 
 func airportSubscriptionAutoUpdateInterval() int {

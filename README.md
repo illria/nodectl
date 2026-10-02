@@ -262,10 +262,10 @@ nodectl-windows-arm64.exe
 Agent 包：
 
 ```text
-nodectl-agent-linux-amd64-v0.2.76
-nodectl-agent-linux-amd64-v0.2.76.sha256
-nodectl-agent-linux-arm64-v0.2.76
-nodectl-agent-linux-arm64-v0.2.76.sha256
+nodectl-agent-linux-amd64-v0.2.77
+nodectl-agent-linux-amd64-v0.2.77.sha256
+nodectl-agent-linux-arm64-v0.2.77
+nodectl-agent-linux-arm64-v0.2.77.sha256
 ```
 
 所有正式包统一从这里获取：

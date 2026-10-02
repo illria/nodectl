@@ -11,7 +11,7 @@ permissions:
 
 env:
   VERSION: v0.4.76-custom.4
-  AGENT_VERSION: v0.2.76
+  AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
@@ -146,6 +146,7 @@ jobs:
             - CloudflareST、cloudflared、NodeCTL 与 Agent 稳定版检查移除 GitHub API 依赖
             - install.sh 稳定版安装与更新通过 Releases 重定向获取版本
             - 新增默认开启的机场订阅自动同步，默认间隔 6 小时
+            - Agent 更新为 v0.2.77，启动检查按 Agent 产物版本判断升级
 
             ### Docker
             `ghcr.io/illria/nodectl:v0.4.76-custom.4`

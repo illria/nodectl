@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"nodectl/internal/database"
@@ -17,6 +18,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// 手动同步和后台同步共用入口；串行执行，避免同一订阅并发删除和重建节点。
+var airportSubscriptionSyncMu sync.Mutex
 
 // DeleteAirportSubscription 删除关联的节点和订阅本身，并清理可能存在于内存中的测试废土
 func DeleteAirportSubscription(subID string) error {
@@ -36,6 +40,9 @@ func DeleteAirportSubscription(subID string) error {
 
 // SyncAirportSubscription 执行订阅更新核心逻辑
 func SyncAirportSubscription(subID string) error {
+	airportSubscriptionSyncMu.Lock()
+	defer airportSubscriptionSyncMu.Unlock()
+
 	var sub database.AirportSub
 	if err := database.DB.First(&sub, "id = ?", subID).Error; err != nil {
 		return err

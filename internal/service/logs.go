@@ -691,7 +691,7 @@ func nodeGroupToCN(v string) string {
 	case "0":
 		return "禁用"
 	case "1":
-		return "直连"
+		return "中转"
 	case "2":
 		return "落地"
 	case "3":
@@ -973,8 +973,10 @@ func formatValueCN(key, val string) string {
 		}
 	case "routing_type":
 		switch val {
+		case "0":
+			return "禁用"
 		case "1":
-			return "直连"
+			return "中转"
 		case "2":
 			return "落地"
 		case "3":

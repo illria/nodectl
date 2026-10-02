@@ -27,5 +27,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Verify prepared Agent version
+        run: |
+          grep -Fq 'AGENT_VERSION: v0.2.77' .github/workflows/publish-custom-release.yml
+          grep -Fq 'nodectl-agent-linux-amd64-v0.2.77' README.md
+          grep -Fq 'nodectl-agent-linux-arm64-v0.2.77' README.md
+
       - name: Run Go tests
         run: go test ./...

@@ -54,17 +54,17 @@ func TestExpandedAssetsURL(t *testing.T) {
 }
 
 func TestAssetsExtractsMatchingReleaseLinks(t *testing.T) {
-	body := []byte(`<a href="/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.76">binary</a>
-<a href="https://github.com/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.76.sha256">checksum</a>
+	body := []byte(`<a href="/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.77">binary</a>
+<a href="https://github.com/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.77.sha256">checksum</a>
 <a href="https://example.com/owner/repo/releases/download/v1.2.3/not-a-release-asset">external</a>`)
 	assets := Assets(body, "https://github.com/owner/repo/releases/tag/v1.2.3")
 	if len(assets) != 2 {
 		t.Fatalf("got %d assets, want 2: %#v", len(assets), assets)
 	}
-	if assets[0].Name != "nodectl-agent-linux-amd64-v0.2.76" {
+	if assets[0].Name != "nodectl-agent-linux-amd64-v0.2.77" {
 		t.Fatalf("unexpected asset name: %q", assets[0].Name)
 	}
-	if assets[0].URL != "https://github.com/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.76" {
+	if assets[0].URL != "https://github.com/owner/repo/releases/download/v1.2.3/nodectl-agent-linux-amd64-v0.2.77" {
 		t.Fatalf("unexpected asset URL: %q", assets[0].URL)
 	}
 }

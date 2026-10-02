@@ -268,7 +268,7 @@ func apiAirportNodeRouting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 0=禁用, 1=直连, 2=落地
+	// 0=禁用，1=中转，2=落地
 	if err := database.DB.Model(&database.AirportNode{}).
 		Where("id = ?", req.ID).
 		Update("routing_type", req.RoutingType).Error; err != nil {

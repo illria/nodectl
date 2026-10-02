@@ -210,8 +210,6 @@ proxy-groups:
 
   - name: 手动选择
     type: select
-    proxies:
-      - 🇨🇳 大陆
     use:
       - 落地机场
 

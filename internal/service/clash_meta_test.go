@@ -17,6 +17,7 @@ type renderedClashConfig struct {
 		UDP  bool   `yaml:"udp"`
 	} `yaml:"proxies"`
 	ProxyProviders map[string]struct {
+		URL      string `yaml:"url"`
 		Override struct {
 			DialerProxy string `yaml:"dialer-proxy"`
 			SkipProxy   bool   `yaml:"skip-proxy"`
@@ -112,8 +113,18 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	if config.ProxyProviders["落地机场"].Override.DialerProxy != "💠 中转策略" || config.ProxyProviders["落地机场"].Override.SkipProxy {
 		t.Fatalf("unexpected landing provider override: %#v", config.ProxyProviders["落地机场"].Override)
 	}
+	if got := config.ProxyProviders["中转机场"].URL; got != data.RelaySubURL {
+		t.Fatalf("中转机场 URL = %q, want %q", got, data.RelaySubURL)
+	}
+	if got := config.ProxyProviders["落地机场"].URL; got != data.ExitSubURL {
+		t.Fatalf("落地机场 URL = %q, want %q", got, data.ExitSubURL)
+	}
 	if config.ProxyGroups[0].Use[0] != "落地机场" {
 		t.Fatalf("总模式 does not expose landing nodes: %#v", config.ProxyGroups[0].Use)
+	}
+	manual := config.ProxyGroups[2]
+	if len(manual.Proxies) != 0 || len(manual.Use) != 1 || manual.Use[0] != "落地机场" {
+		t.Fatalf("手动选择 must default to landing provider, got %#v", manual)
 	}
 	var relayOffFound bool
 	for _, proxy := range config.Proxies {
