@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.2
+  VERSION: v0.4.76-custom.3
   AGENT_VERSION: v0.2.76
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,7 +135,11 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.2
+            ### v0.4.76-custom.3
+            - 修复 Geo 数据库首次下载在 GitHub API 403 rate limit 下直接失败的问题
+            - Geo 版本检查改为普通 GitHub Release 重定向，不再依赖 api.github.com
+            - Geo 数据库改为 releases/latest/download 正式 Release Asset
+            - 即使版本查询失败也继续尝试下载数据库，避免 Geo 功能被版本检查阻断
             - README 全面切换到 illria/nodectl 的安装、Release 与 GHCR 地址
             - install.sh 改为从 illria/nodectl Releases 获取面板二进制
             - 面板版本检查改为检查 illria/nodectl Releases
@@ -145,7 +149,7 @@ jobs:
             - 保留 custom.1 的地区自动选择、地区策略组、业务分流与加密货币模块
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.2`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.3`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -156,7 +160,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

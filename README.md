@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前稳定版：**`v0.4.76-custom.2`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前稳定版：**`v0.4.76-custom.3`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -138,7 +138,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 推荐生产环境锁定当前稳定版 `v0.4.76-custom.2`；`latest` 会跟随本仓库 `main` 分支更新。
+> 推荐生产环境锁定当前稳定版 `v0.4.76-custom.3`；`latest` 会跟随本仓库 `main` 分支更新。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -147,7 +147,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.2
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.3
 ```
 
 启动：
@@ -162,7 +162,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.2
+  ghcr.io/illria/nodectl:v0.4.76-custom.3
 ```
 
 访问：
@@ -190,7 +190,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.2
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.3
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -277,7 +277,7 @@ nodectl-agent-linux-arm64-v0.2.76.sha256
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.2 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.3 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -287,14 +287,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.2
+  ghcr.io/illria/nodectl:v0.4.76-custom.3
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前稳定 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.2` |
+| 当前稳定 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.3` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |
