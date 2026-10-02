@@ -84,29 +84,28 @@ tun:
 
 dns:
   enable: true
+  cache-algorithm: arc
+  prefer-h3: false
   ipv6: true
   listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
-  fake-ip-range: 172.20.0.1/16
+  # 使用 Mihomo 默认的 benchmark 网段，避免与 172.16.0.0/12 私网直连规则重叠。
+  fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
     - "RULE-SET:CN_域"
     - "RULE-SET:Private_域"
-    - "RULE-SET:GoogleFCM_域"
     - "+.3gppnetwork.org"
     - "+.xtracloud.net"
-  direct-nameserver:
-    - https://doh.pub/dns-query#🇨🇳 大陆&h3=false
-    - https://dns.alidns.com/dns-query#🇨🇳 大陆&h3=true
+  # 仅用于解析代理节点自身域名，防止“先需要代理才能解析代理”的递归。
+  # 这些 bootstrap DNS 不处理客户端普通 DNS 查询。
   proxy-server-nameserver:
-    - https://doh.pub/dns-query#🇨🇳 大陆&h3=false
-    - https://dns.alidns.com/dns-query#🇨🇳 大陆&h3=true
-  nameserver-policy:
-    "RULE-SET:{{.NameserverPolicyRuleSet}}":
-       - https://doh.pub/dns-query#🇨🇳 大陆&h3=false
-       - https://dns.alidns.com/dns-query#🇨🇳 大陆&h3=true
+    - 223.5.5.5
+    - 119.29.29.29
+  # 客户端普通 DNS 的 A / AAAA 查询全部跟随“总模式”。
+  # 因此：总模式=美国落地且开启搬瓦工中转时，DoH 也走同一条代理链。
   nameserver:
-    - https://dns.google/dns-query#DNS连接&h3=true
-    - https://cloudflare-dns.com/dns-query#DNS连接&h3=true
+    - https://1.1.1.1/dns-query#总模式&h3=false
+    - https://8.8.8.8/dns-query#总模式&h3=false
 
 proxies:
     - {name: 🇨🇳 大陆, type: direct, udp: true}
@@ -548,10 +547,6 @@ proxy-groups:
       - 🇨🇳 大陆
       - 总模式
 
-  - name: DNS连接
-    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/DNS.svg"
-    <<: *proxy_groups
-
   - name: 漏网之鱼
     icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/HBASE-copy.svg"
     <<: *proxy_groups
@@ -675,7 +670,7 @@ rules:
   - RULE-SET,{{.Name}}_自定义分流,{{.Name}}
 {{end}}
   - DST-PORT,53,🌐 DNS_Hijack
-  - DST-PORT,853,DNS连接
+  - DST-PORT,853,总模式
 
 {{range .ActiveModules}}
   {{if ne .Type "reject"}}
