@@ -494,7 +494,7 @@ rule-providers:
     type: http
     behavior: classical
     format: text
-    interval: {{.PublicRulesInterval}}
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/WebRTC.list
     url: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/rules/WebRTC.list"
 
@@ -504,7 +504,7 @@ rule-providers:
     type: http
     behavior: domain
     format: mrs
-    interval: {{.PublicRulesInterval}}
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/{{.Name}}_Domain.mrs
     url: "{{.DomainURL}}"
   {{end}}
@@ -513,7 +513,7 @@ rule-providers:
     type: http
     behavior: ipcidr
     format: mrs
-    interval: {{.PublicRulesInterval}}
+    interval: {{$.PublicRulesInterval}}
     path: ./rules/{{.Name}}_IP.mrs
     url: "{{.IPURL}}"
   {{end}}
