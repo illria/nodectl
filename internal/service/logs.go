@@ -55,6 +55,8 @@ var (
 		"cf_domain":                               "Cloudflare 域名",
 		"cf_auto_renew":                           "证书自动续签",
 		"airport_filter_invalid":                  "过滤失效节点",
+		"airport_auto_update_enabled":             "机场订阅自动同步",
+		"airport_auto_update_interval_minutes":    "机场订阅同步间隔",
 		"tg_bot_enabled":                          "Telegram Bot 开关",
 		"tg_bot_token":                            "Telegram Bot Token",
 		"tg_bot_whitelist":                        "Telegram 白名单",

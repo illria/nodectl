@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.3
+  VERSION: v0.4.76-custom.4
   AGENT_VERSION: v0.2.76
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,21 +135,20 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.3
-            - 修复 Geo 数据库首次下载在 GitHub API 403 rate limit 下直接失败的问题
-            - Geo 版本检查改为普通 GitHub Release 重定向，不再依赖 api.github.com
-            - Geo 数据库改为 releases/latest/download 正式 Release Asset
-            - 即使版本查询失败也继续尝试下载数据库，避免 Geo 功能被版本检查阻断
-            - README 全面切换到 illria/nodectl 的安装、Release 与 GHCR 地址
-            - install.sh 改为从 illria/nodectl Releases 获取面板二进制
-            - 面板版本检查改为检查 illria/nodectl Releases
-            - Agent 自更新仓库改为 illria/nodectl
-            - Release 补齐 Linux / Windows 面板二进制
-            - Release 补齐 Linux amd64 / arm64 Agent 与 SHA256
-            - 保留 custom.1 的地区自动选择、地区策略组、业务分流与加密货币模块
+            ### v0.4.76-custom.4
+            - 重排 Clash 策略组：总模式、中转策略、手动选择、软件策略、地区与自动组、辅助组
+            - 删除默认代理和总自动选择，MATCH 直接进入总模式
+            - 新增中转关闭直连节点，落地机场通过中转策略统一控制 dialer-proxy
+            - 地区策略与对应自动组按国家成对排列
+            - 软件策略提前，并以总模式作为第一项
+            - 将加密货币图标替换为可加载的 Bitcoin SVG
+            - Mihomo 稳定版下载改用 Releases 重定向，不再依赖 GitHub API
+            - CloudflareST、cloudflared、NodeCTL 与 Agent 稳定版检查移除 GitHub API 依赖
+            - install.sh 稳定版安装与更新通过 Releases 重定向获取版本
+            - 新增默认开启的机场订阅自动同步，默认间隔 6 小时
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.3`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.4`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -160,7 +159,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.3' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

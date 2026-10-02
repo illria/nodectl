@@ -99,7 +99,7 @@ func (s *GeoService) GetLocalVersion() string {
 }
 
 // GetRemoteVersion 通过 GitHub Releases 普通网页重定向获取最新 Tag。
-// 不使用 api.github.com，避免共享出口 IP 命中 GitHub 未认证 API 速率限制。
+// 通过普通 GitHub Releases 页面获取版本，避免共享出口 IP 命中未认证 API 速率限制。
 func (s *GeoService) GetRemoteVersion() (string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, GeoReleaseURL, nil)

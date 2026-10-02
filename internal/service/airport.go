@@ -95,7 +95,10 @@ func SyncAirportSubscription(subID string) error {
 		parseTraffic(respV2ray.Header.Get("Subscription-Userinfo"))
 	}
 
-	bodyBytes, _ := io.ReadAll(respV2ray.Body)
+	bodyBytes, err := io.ReadAll(respV2ray.Body)
+	if err != nil {
+		return fmt.Errorf("读取机场订阅响应失败: %w", err)
+	}
 	content := string(bodyBytes)
 
 	// 2. 解析节点链接 (自动识别 Base64 或 Clash)
@@ -108,7 +111,7 @@ func SyncAirportSubscription(subID string) error {
 
 	if len(newLinks) == 0 {
 		logger.Log.Warn("订阅未解析到任何节点", "sub_name", sub.Name)
-		return nil
+		return fmt.Errorf("机场订阅 %q 未解析到任何节点", sub.Name)
 	}
 
 	// 3. 获取旧节点状态 (Name -> RoutingType 映射)
@@ -183,7 +186,9 @@ func SyncAirportSubscription(subID string) error {
 	}
 
 	// 6. 提交事务 (这一步非常重要，不提交则上面的节点和流量都不会保存)
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("提交机场订阅更新失败: %w", err)
+	}
 	return nil
 }
 
