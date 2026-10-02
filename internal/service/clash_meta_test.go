@@ -30,6 +30,15 @@ type renderedClashConfig struct {
 		Proxies []string `yaml:"proxies"`
 		Use     []string `yaml:"use"`
 	} `yaml:"proxy-groups"`
+	DNS struct {
+		IPv6                  bool              `yaml:"ipv6"`
+		EnhancedMode          string            `yaml:"enhanced-mode"`
+		FakeIPRange           string            `yaml:"fake-ip-range"`
+		DirectNameserver      []string          `yaml:"direct-nameserver"`
+		ProxyServerNameserver []string          `yaml:"proxy-server-nameserver"`
+		Nameserver            []string          `yaml:"nameserver"`
+		NameserverPolicy      map[string]any    `yaml:"nameserver-policy"`
+	} `yaml:"dns"`
 	Rules []string `yaml:"rules"`
 }
 
@@ -40,7 +49,6 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		BaseURL:                 "https://panel.example",
 		Token:                   "x",
 		ActiveModules:           []ClashModuleDef{{Name: "Telegram", Icon: "https://example.test/telegram.svg"}, {Name: "加密货币", Icon: "💱"}},
-		NameserverPolicyRuleSet: "CN_域",
 		ProxiesInterval:         "3600",
 		RulesInterval:           "300",
 		PublicRulesInterval:     "86400",
@@ -143,6 +151,39 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "MATCH,默认代理") {
 		t.Fatal("legacy default proxy MATCH rule is present")
+	}
+
+	if config.DNS.EnhancedMode != "fake-ip" || config.DNS.FakeIPRange != "198.18.0.1/16" {
+		t.Fatalf("unexpected DNS fake-ip config: mode=%q range=%q", config.DNS.EnhancedMode, config.DNS.FakeIPRange)
+	}
+	if len(config.DNS.DirectNameserver) != 0 || len(config.DNS.NameserverPolicy) != 0 {
+		t.Fatalf("client DNS must not use split/direct resolver paths: direct=%v policy=%v", config.DNS.DirectNameserver, config.DNS.NameserverPolicy)
+	}
+	if len(config.DNS.ProxyServerNameserver) == 0 {
+		t.Fatal("proxy-server-nameserver bootstrap resolvers are required")
+	}
+	if len(config.DNS.Nameserver) != 2 {
+		t.Fatalf("unexpected client nameserver count: %v", config.DNS.Nameserver)
+	}
+	for _, server := range config.DNS.Nameserver {
+		if !strings.Contains(server, "#总模式") {
+			t.Fatalf("client DNS server does not follow 总模式: %q", server)
+		}
+	}
+	if _, exists := groupByName["DNS连接"]; exists {
+		t.Fatal("legacy independent DNS连接 group must be removed")
+	}
+	var dotRuleFound bool
+	for _, rule := range config.Rules {
+		if rule == "DST-PORT,853,总模式" {
+			dotRuleFound = true
+		}
+		if strings.Contains(rule, "DNS连接") {
+			t.Fatalf("legacy DNS连接 rule still present: %q", rule)
+		}
+	}
+	if !dotRuleFound {
+		t.Fatal("DoT traffic must follow 总模式")
 	}
 }
 
