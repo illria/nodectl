@@ -57,6 +57,22 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	if err := yaml.Unmarshal(output.Bytes(), &config); err != nil {
 		t.Fatalf("parse rendered YAML: %v", err)
 	}
+
+	var topLevel map[string]any
+	if err := yaml.Unmarshal(output.Bytes(), &topLevel); err != nil {
+		t.Fatalf("parse rendered YAML top-level keys: %v", err)
+	}
+	for _, forbidden := range []string{
+		"mixed-port", "redir-port", "tproxy-port", "ipv6", "mode", "allow-lan",
+		"disable-keep-alive", "geodata-mode", "geo-auto-update", "geo-update-interval",
+		"geox-url", "experimental", "unified-delay", "tcp-concurrent", "log-level",
+		"find-process-mode", "global-client-fingerprint", "profile", "sniffer", "tun", "dns",
+		"proxy_groups", "rule-anchor",
+	} {
+		if _, ok := topLevel[forbidden]; ok {
+			t.Fatalf("minimal subscription still overrides client runtime with top-level key %q", forbidden)
+		}
+	}
 	if len(config.ProxyGroups) < 3 {
 		t.Fatalf("only %d proxy groups rendered", len(config.ProxyGroups))
 	}
