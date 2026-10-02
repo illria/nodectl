@@ -11,6 +11,9 @@ import (
 	"nodectl/internal/relaychain"
 )
 
+// Injectable process boundary keeps command tests from starting sing-box.
+var chainSetApply = (*Runtime).applyChainSet
+
 func (rt *Runtime) executeChainApply(cmd ServerCommand, reply func(CommandResult)) {
 	var chain relaychain.Config
 	if err := json.Unmarshal(cmd.Payload, &chain); err != nil {
@@ -34,11 +37,11 @@ func (rt *Runtime) executeChainApply(cmd ServerCommand, reply func(CommandResult
 	if !found {
 		next = append(next, chain)
 	}
-	if err := rt.applyChainSet(next); err != nil {
+	if err := chainSetApply(rt, next); err != nil {
 		reply(CommandResult{Type: "result", Status: "error", Message: err.Error()})
 		return
 	}
-	reply(CommandResult{Type: "result", Status: "ok", Message: "中转链配置已应用"})
+	reply(chainApplyResult(chain))
 }
 
 func (rt *Runtime) executeChainDelete(cmd ServerCommand, reply func(CommandResult)) {
@@ -56,11 +59,31 @@ func (rt *Runtime) executeChainDelete(cmd ServerCommand, reply func(CommandResul
 			next = append(next, chain)
 		}
 	}
-	if err := rt.applyChainSet(next); err != nil {
+	if err := chainSetApply(rt, next); err != nil {
 		reply(CommandResult{Type: "result", Status: "error", Message: err.Error()})
 		return
 	}
 	reply(CommandResult{Type: "result", Status: "ok", Message: "中转链配置已删除"})
+}
+
+// executeChainSync replaces the entire panel-authoritative set, including [].
+func (rt *Runtime) executeChainSync(cmd ServerCommand, reply func(CommandResult)) {
+	var chains []relaychain.Config
+	if err := json.Unmarshal(cmd.Payload, &chains); err != nil || chains == nil {
+		reply(CommandResult{Type: "result", Status: "error", Message: "无效中转链集合，应为 JSON 数组"})
+		return
+	}
+	for _, chain := range chains {
+		if err := chain.Validate(); err != nil {
+			reply(CommandResult{Type: "result", Status: "error", Message: err.Error()})
+			return
+		}
+	}
+	if err := chainSetApply(rt, chains); err != nil {
+		reply(CommandResult{Type: "result", Status: "error", Message: err.Error()})
+		return
+	}
+	reply(CommandResult{Type: "result", Status: "ok", Message: "中转链完整集合已同步"})
 }
 
 // applyChainSet saves the exact chain set before restarting sing-box. On a failed
@@ -71,7 +94,10 @@ func (rt *Runtime) applyChainSet(chains []relaychain.Config) error {
 	cm := mgr.GetConfigManager()
 	previous := append([]relaychain.Config(nil), cm.Chains...)
 	if len(previous) == len(chains) && (len(chains) == 0 || reflect.DeepEqual(previous, chains)) && mgr.IsRunning() {
-		return nil
+		if err := cm.ReplaceChains(chains); err != nil {
+			return fmt.Errorf("保存中转链失败: %w", err)
+		}
+		return cm.GenerateAndSave()
 	}
 	ctx := context.Background()
 	if err := mgr.GetInstaller().EnsureInstalled(ctx); err != nil {
@@ -82,6 +108,7 @@ func (rt *Runtime) applyChainSet(chains []relaychain.Config) error {
 	}
 	if err := cm.GenerateAndSave(); err != nil {
 		_ = cm.ReplaceChains(previous)
+		_ = cm.GenerateAndSave()
 		return fmt.Errorf("生成中转链配置失败: %w", err)
 	}
 	mgr.ForceKill()
@@ -95,17 +122,4 @@ func (rt *Runtime) applyChainSet(chains []relaychain.Config) error {
 		return fmt.Errorf("启动中转链失败: %w", err)
 	}
 	return nil
-}
-
-func (rt *Runtime) refreshChainsFromPanel(ctx context.Context) {
-	chains, err := rt.fetchPanelChains(ctx)
-	if err != nil {
-		log.Printf("[Agent] 重连后获取中转链失败，保留本地缓存: %v", err)
-		return
-	}
-	rt.configMu.Lock()
-	defer rt.configMu.Unlock()
-	if err := rt.applyChainSet(chains); err != nil {
-		log.Printf("[Agent] 重连后恢复中转链失败: %v", err)
-	}
 }

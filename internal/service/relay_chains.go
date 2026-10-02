@@ -18,16 +18,19 @@ import (
 	"nodectl/internal/logger"
 	"nodectl/internal/relaychain"
 
+	"golang.org/x/mod/semver"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const (
-	ChainPending       = "pending"
-	ChainActive        = "active"
-	ChainError         = "error"
-	ChainPendingDelete = "pending_delete"
-	chainMinPort       = 30000
-	chainMaxPort       = 49999
+	ChainPending         = "pending"
+	ChainActive          = "active"
+	ChainError           = "error"
+	ChainPendingDelete   = "pending_delete"
+	chainMinAgentVersion = "v0.2.78"
+	chainMinPort         = 30000
+	chainMaxPort         = 49999
 )
 
 var (
@@ -60,6 +63,9 @@ func CreateRelayChain(relayUUID, exitUUID string) (*database.RelayChain, error) 
 	}
 	if relay.InstallID == exit.InstallID {
 		return nil, fmt.Errorf("中转与落地必须由不同的 Agent 管理")
+	}
+	if !relayChainAgentVersionSupported(relay.AgentVersion) || !relayChainAgentVersionSupported(exit.AgentVersion) {
+		return nil, fmt.Errorf("中转链要求 Relay 和 Exit Agent >= v0.2.78，请先升级 Agent")
 	}
 	relayIP := preferredNodeIP(relay)
 	exitIP := preferredNodeIP(exit)
@@ -113,8 +119,9 @@ func CreateRelayChain(relayUUID, exitUUID string) (*database.RelayChain, error) 
 		ExitListenPort: exitPort, ExitMethod: relaychain.Method, ExitPassword: exitSecret,
 	}
 	chain.CompositeLink = chainShareLink(chain)
-	if err := database.DB.Create(&chain).Error; err != nil {
-		return nil, err
+	// GORM's SQL logger must not print a slow/failed INSERT containing secrets.
+	if err := database.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).Create(&chain).Error; err != nil {
+		return nil, fmt.Errorf("保存中转链失败")
 	}
 	applyRelayChainLocked(&chain)
 	return &chain, nil
@@ -242,7 +249,7 @@ func relayAgentChain(c database.RelayChain) relaychain.Config {
 		ExitMethod: c.ExitMethod, ExitPassword: c.ExitPassword}
 }
 
-// AgentRelayChains is the complete authoritative set returned at Agent startup.
+// AgentRelayChains is the complete authoritative set sent over WS chain-sync.
 // Pending/error chains remain in the set: an Exit may already be configured
 // before the Relay command succeeds, and a reconnect must not erase it.
 func AgentRelayChains(installID string) ([]relaychain.Config, error) {
@@ -279,6 +286,80 @@ func ReconcileRelayChainsForNode(installID string) {
 			applyRelayChainLocked(&chains[i])
 		}
 	}
+}
+
+// ReconcileRelayChainNodeAddress follows the latest reported endpoint address.
+// Relay address changes affect the client subscription only. Exit address
+// changes require the Exit inbound before replacing the Relay outbound.
+func ReconcileRelayChainNodeAddress(nodeUUID string) {
+	relayChainMu.Lock()
+	defer relayChainMu.Unlock()
+
+	var node database.NodePool
+	if err := database.DB.First(&node, "uuid = ?", nodeUUID).Error; err != nil {
+		logger.Log.Error("读取中转链节点地址失败", "node_uuid", nodeUUID, "error", err)
+		return
+	}
+	var chains []database.RelayChain
+	if err := database.DB.Where("enabled = ? AND status <> ? AND (relay_node_uuid = ? OR exit_node_uuid = ?)",
+		true, ChainPendingDelete, nodeUUID, nodeUUID).Find(&chains).Error; err != nil {
+		logger.Log.Error("读取节点中转链失败", "node_uuid", nodeUUID, "error", err)
+		return
+	}
+	ip := preferredNodeIP(node)
+	for i := range chains {
+		chain := &chains[i]
+		updates := make(map[string]interface{})
+		addressChanged, exitAddressChanged := false, false
+		if chain.RelayNodeUUID == nodeUUID {
+			if ip != "" && chain.RelayIP != ip {
+				chain.RelayIP = ip
+				updates["relay_ip"] = ip
+				addressChanged = true
+			}
+			if chain.RelayName != node.Name {
+				chain.RelayName = node.Name
+				updates["relay_name"] = node.Name
+			}
+		} else {
+			if ip != "" && chain.ExitIP != ip {
+				chain.ExitIP = ip
+				updates["exit_ip"] = ip
+				addressChanged, exitAddressChanged = true, true
+			}
+			if chain.ExitName != node.Name {
+				chain.ExitName = node.Name
+				updates["exit_name"] = node.Name
+			}
+		}
+		if len(updates) == 0 {
+			continue
+		}
+		chain.CompositeLink = chainShareLink(*chain)
+		updates["composite_link"] = chain.CompositeLink
+		if exitAddressChanged {
+			chain.Status, chain.LastError = ChainPending, ""
+			updates["status"], updates["last_error"] = ChainPending, ""
+		}
+		// CompositeLink contains credentials; keep it out of GORM SQL logs and
+		// database-driver error details as well as application logs.
+		if err := database.DB.Session(&gorm.Session{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}).Model(chain).Updates(updates).Error; err != nil {
+			logger.Log.Error("保存中转链节点地址失败", "chain_id", chain.ID, "node_uuid", nodeUUID)
+			continue
+		}
+		if addressChanged && (!relayChainOnline(chain.RelayInstallID) || !relayChainOnline(chain.ExitInstallID)) {
+			setRelayChainStatus(chain, ChainPending, "等待离线 Agent 恢复后应用节点地址")
+			continue
+		}
+		if exitAddressChanged {
+			applyRelayChainLocked(chain)
+		}
+	}
+}
+
+func relayChainAgentVersionSupported(version string) bool {
+	version = normalizeSemver(version)
+	return semver.IsValid(version) && semver.Compare(version, chainMinAgentVersion) >= 0
 }
 
 func preferredNodeIP(node database.NodePool) string {

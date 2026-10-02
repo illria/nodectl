@@ -26,7 +26,6 @@ import (
 	"nodectl/internal/agent/links"
 	"nodectl/internal/agent/reporter"
 	"nodectl/internal/agent/singbox"
-	"nodectl/internal/relaychain"
 )
 
 const fixedWSPushIntervalSec = 2
@@ -218,7 +217,8 @@ func (rt *Runtime) createSingboxManager() *singbox.Manager {
 }
 
 // initSingBox 🆕 初始化 sing-box 管理器并尝试启动
-// 配置加载优先级：
+// 首先加载 chains.json，保留离线可用的链；完整权威集合仅通过 WS chain-sync 下发。
+// 普通协议配置加载优先级：
 //  1. Config.Protocols（主配置文件中的协议配置）
 //  2. protocols.json 缓存文件
 //  3. 🆕 主动从面板拉取初始化配置（使用 install_id）
@@ -262,14 +262,6 @@ func (rt *Runtime) initSingBox(ctx context.Context) {
 				log.Printf("[Agent] 保存协议缓存失败: %v", err)
 			}
 		}
-	}
-
-	// Panel's complete chain list is authoritative, including an empty list.
-	// If the panel is unreachable, keep the local cache until the next reconnect.
-	if chains, err := rt.fetchPanelChains(ctx); err != nil {
-		log.Printf("[Agent] 获取面板中转链配置失败，暂用本地缓存: %v", err)
-	} else if err := cfgMgr.ReplaceChains(chains); err != nil {
-		log.Printf("[Agent] 应用面板中转链配置失败: %v", err)
 	}
 
 	// 确保自签证书存在
@@ -345,9 +337,9 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 	}
 
 	apiURL := fmt.Sprintf("%s/api/agent/init-config?install_id=%s",
-		strings.TrimRight(panelURL, "/"), rt.cfg.InstallID)
+		strings.TrimRight(panelURL, "/"), url.QueryEscape(rt.cfg.InstallID))
 
-	log.Printf("[Agent] 正在从面板拉取初始化配置: %s", apiURL)
+	log.Printf("[Agent] 正在从面板拉取初始化配置")
 
 	// 2. 发起 HTTP 请求（带超时，跳过自签证书验证）
 	client := &http.Client{
@@ -365,13 +357,15 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if requestErr, ok := err.(*url.Error); ok {
+			err = requestErr.Err // Do not log the init-config URL or install_id.
+		}
 		return nil, fmt.Errorf("请求面板失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("面板返回非 200: %d, body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("面板返回非 200: %d", resp.StatusCode)
 	}
 
 	// 3. 解析响应
@@ -425,46 +419,6 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 	}
 
 	return pc, nil
-}
-
-func (rt *Runtime) fetchPanelChains(ctx context.Context) ([]relaychain.Config, error) {
-	panelURL := rt.cfg.PanelURL
-	if panelURL == "" {
-		panelURL = DerivePanelURL(rt.cfg.WSURL)
-	}
-	if panelURL == "" {
-		return nil, fmt.Errorf("panel URL is empty")
-	}
-	endpoint := strings.TrimRight(panelURL, "/") + "/api/agent/init-config?install_id=" + url.QueryEscape(rt.cfg.InstallID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "nodectl-agent/"+AgentVersion)
-	client := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("panel init-config returned HTTP %d", resp.StatusCode)
-	}
-	var result struct {
-		Status string `json:"status"`
-		Data   struct {
-			Chains []relaychain.Config `json:"chains"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
-		return nil, err
-	}
-	if result.Status != "success" {
-		return nil, fmt.Errorf("panel rejected init-config request")
-	}
-	return result.Data.Chains, nil
 }
 
 // generateProtocolCredentials 为指定协议生成凭据并设置端口
@@ -805,7 +759,6 @@ func (rt *Runtime) handleDisconnect(ctx context.Context) {
 			continue
 		}
 		log.Printf("[Agent] 重连成功")
-		go rt.refreshChainsFromPanel(ctx)
 		return
 	}
 }
@@ -864,7 +817,7 @@ func (rt *Runtime) handleCommand(cmd ServerCommand, reply func(CommandResult)) {
 	})
 	// Reporter has two command workers. Config mutations must remain serial.
 	switch cmd.Action {
-	case "reset-links", "reinstall-singbox", "push-config", "chain-apply", "chain-delete":
+	case "reset-links", "reinstall-singbox", "push-config", "chain-apply", "chain-delete", "chain-sync":
 		rt.configMu.Lock()
 		defer rt.configMu.Unlock()
 	}
@@ -888,6 +841,8 @@ func (rt *Runtime) handleCommand(cmd ServerCommand, reply func(CommandResult)) {
 		rt.executeChainApply(cmd, reply)
 	case "chain-delete":
 		rt.executeChainDelete(cmd, reply)
+	case "chain-sync":
+		rt.executeChainSync(cmd, reply)
 	default:
 		reply(CommandResult{
 			Type:    "result",

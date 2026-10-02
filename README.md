@@ -136,7 +136,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 
 面板选择 `routing_type=1` 的 NodeCTL Agent 作为 Relay，选择 `routing_type=2` 的 NodeCTL Agent 作为 Exit。创建后，Exit Agent 建立隐藏 Shadowsocks 2022 入站并直出；Relay Agent 建立客户端 SS 入站和连接 Exit IP 的 SS 出站。普通订阅只发布 `Relay → Exit` 这一个 SS 节点，客户端不使用 `dialer-proxy`。机场节点和外部自定义节点暂不支持作为服务端 Exit。
 
-Agent v0.2.78 将链配置保存到 `/var/lib/nodectl-agent/chains.json`，重启时先读取缓存，再从面板 `/api/agent/init-config` 获取权威链列表。目标正式版本是 `v0.4.76-custom.9`；人工审核完成前不要将本分支当成已发布版本使用。
+Agent v0.2.78 将链配置保存到 `/var/lib/nodectl-agent/chains.json`，重启时先读取缓存；每次 WebSocket 连接成功后，面板通过现有 command 通道发送完整 `chain-sync` 权威集合（包括空数组），HTTP `/api/agent/init-config` 仅返回协议、端口和连接元数据，不包含链配置或密钥。Relay 应用链配置后会探测 Exit TCP 端口，探测失败的链不会进入 active；创建链要求两端 Agent >= v0.2.78。目标正式版本是 `v0.4.76-custom.9`；人工审核完成前不要将本分支当成已发布版本使用。
 
 ---
 

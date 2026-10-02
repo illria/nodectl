@@ -475,7 +475,12 @@ func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, client
 	}
 	h.ensureNodeLiveState(installID)
 	OnNodeConnectionStatusChanged(installID, true)
-	go ReconcileRelayChainsForNode(installID)
+	go func() {
+		if err := SyncRelayChainsToNode(installID); err != nil {
+			logger.Log.Warn("同步 Agent 中转链集合失败", "install_id", installID)
+		}
+		ReconcileRelayChainsForNode(installID)
+	}()
 
 	nodeName := h.resolveNodeNameByInstallID(installID)
 	if nodeName == "" {
@@ -1462,11 +1467,8 @@ func (h *TrafficHub) handleNodeOnline(msg wsMessage, clientIP string) {
 	if len(updates) > 0 {
 		if err := database.DB.Model(&database.NodePool{}).Where("install_id = ?", installID).Updates(updates).Error; err != nil {
 			logger.Log.Error("node_online: 更新节点信息失败", "error", err, "install_id", installID)
-		} else {
-			nodeName := strings.TrimSpace(node.Name)
-			if nodeName == "" {
-				nodeName = installID
-			}
+		} else if updates["ipv4"] != nil || updates["ipv6"] != nil {
+			go ReconcileRelayChainNodeAddress(node.UUID)
 		}
 	}
 }
@@ -1545,6 +1547,9 @@ func (h *TrafficHub) handleLinksUpdate(msg wsMessage, clientIP string) {
 		if err := database.DB.Model(&database.NodePool{}).Where("install_id = ?", installID).Updates(updates).Error; err != nil {
 			logger.Log.Error("links_update: 更新失败", "error", err, "install_id", installID)
 		} else {
+			if updates["ipv4"] != nil || updates["ipv6"] != nil {
+				go ReconcileRelayChainNodeAddress(node.UUID)
+			}
 			nodeName := strings.TrimSpace(node.Name)
 			if nodeName == "" {
 				nodeName = installID
