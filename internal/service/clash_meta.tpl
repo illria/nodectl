@@ -69,52 +69,13 @@ sniffer:
   skip-domain:
     - "Mijia Cloud"
 
-tun:
-  enable: true
-  device: Meta
-  stack: mixed
-  dns-hijack:
-    - any:53
-    - tcp://any:53
-  udp-timeout: 300
-  auto-route: true
-  strict-route: true
-  auto-redirect: false
-  auto-detect-interface: true
 
-dns:
-  enable: true
-  cache-algorithm: arc
-  prefer-h3: false
-  respect-rules: true
-  use-hosts: false
-  use-system-hosts: false
-  ipv6: true
-  listen: 0.0.0.0:1053
-  enhanced-mode: fake-ip
-  # 使用 Mihomo 默认的 benchmark 网段，避免与 172.16.0.0/12 私网直连规则重叠。
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-range6: fdfe:dcba:9876::1/64
-  fake-ip-filter:
-    - "RULE-SET:CN_域"
-    - "RULE-SET:Private_域"
-    - "+.3gppnetwork.org"
-    - "+.xtracloud.net"
-  # 仅用于解析代理节点自身域名，防止“先需要代理才能解析代理”的递归。
-  # 这些 bootstrap DNS 不处理客户端普通 DNS 查询。
-  proxy-server-nameserver:
-    - https://1.1.1.1/dns-query#中转关闭&h3=false
-    - https://8.8.8.8/dns-query#中转关闭&h3=false
-  # 客户端普通 DNS 的 A / AAAA 查询全部跟随“总模式”。
-  # 因此：总模式=美国落地且开启搬瓦工中转时，DoH 也走同一条代理链。
-  nameserver:
-    - https://1.1.1.1/dns-query#总模式&h3=false
-    - https://8.8.8.8/dns-query#总模式&h3=false
+# DNS / TUN are intentionally not emitted here.
+# Mobile clients such as Mihomo Party manage their own tunnel and resolver stack.
 
 proxies:
     - {name: 🇨🇳 大陆, type: direct, udp: true}
     - {name: ⛔️ 拒绝连接, type: reject}
-    - {name: 🌐 DNS_Hijack, type: dns}
     - {name: 中转关闭, type: direct, udp: true}
 
 # -------------------- 软件策略通用选项 --------------------
@@ -593,11 +554,6 @@ rule-providers:
     path: ./rules/WebRTC.list
     url: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/rules/WebRTC.list"
 
-  DoH_域:
-    <<: *Domain
-    path: ./rules/category-doh.mrs
-    url: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-doh.mrs"
-
   CN_IP:
     <<: *IPCIDR
     path: ./rules/CN_IP.mrs
@@ -659,23 +615,6 @@ rules:
   - RULE-SET,我的直连规则,🇨🇳 大陆
   - RULE-SET,WebRTC_端/域,⛔️ 拒绝连接
 
-  # 阻断客户端/浏览器自己发起的加密 DNS，强制回落到 Mihomo 内部 DNS。
-  - RULE-SET,DoH_域,⛔️ 拒绝连接
-  - DST-PORT,853,⛔️ 拒绝连接
-  - IP-CIDR,1.1.1.1/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,1.0.0.1/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,8.8.8.8/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,8.8.4.4/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,9.9.9.9/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,149.112.112.112/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,223.5.5.5/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,223.6.6.6/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,119.29.29.29/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR,1.12.12.12/32,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR6,2606:4700:4700::1111/128,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR6,2606:4700:4700::1001/128,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR6,2001:4860:4860::8888/128,⛔️ 拒绝连接,no-resolve
-  - IP-CIDR6,2001:4860:4860::8844/128,⛔️ 拒绝连接,no-resolve
 {{range .ActiveModules}}
   {{if eq .Type "reject"}}
   {{$target := "⛔️ 拒绝连接"}}
@@ -696,7 +635,6 @@ rules:
 {{range .CustomProxies}}
   - RULE-SET,{{.Name}}_自定义分流,{{.Name}}
 {{end}}
-  - DST-PORT,53,🌐 DNS_Hijack
 
 {{range .ActiveModules}}
   {{if ne .Type "reject"}}
