@@ -31,7 +31,7 @@ DEFAULT_PORT=8080
 check_root() {
     if [ "$(id -u)" != "0" ]; then
         err "此脚本需要 root 权限运行"
-        err "请使用: sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/illria/nodectl/main/install.sh)""
+        err '请使用: sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/illria/nodectl/main/install.sh)"'
         exit 1
     fi
 }
