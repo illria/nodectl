@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"nodectl/internal/relaychain"
 )
 
 // 默认路径常量
@@ -14,6 +16,7 @@ const (
 	DefaultWorkDir       = "/var/lib/nodectl-agent"
 	DefaultConfigPath    = "/var/lib/nodectl-agent/singbox-config.json"
 	DefaultProtocolsPath = "/var/lib/nodectl-agent/protocols.json"
+	DefaultChainsPath    = "/var/lib/nodectl-agent/chains.json"
 	DefaultCertDir       = "/var/lib/nodectl-agent/certs"
 	DefaultCertPath      = "/var/lib/nodectl-agent/certs/fullchain.pem"
 	DefaultKeyPath       = "/var/lib/nodectl-agent/certs/privkey.pem"
@@ -23,8 +26,10 @@ const (
 type ConfigManager struct {
 	configPath    string          // sing-box 配置文件输出路径
 	protocolsPath string          // 协议配置缓存路径
+	chainsPath    string          // 服务端中转链缓存路径
 	certDir       string          // 证书目录
 	Protocols     *ProtocolConfig // 当前协议配置
+	Chains        []relaychain.Config
 }
 
 // NewConfigManager 创建配置管理器
@@ -32,6 +37,7 @@ func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
 		configPath:    DefaultConfigPath,
 		protocolsPath: DefaultProtocolsPath,
+		chainsPath:    DefaultChainsPath,
 		certDir:       DefaultCertDir,
 		Protocols:     DefaultProtocolConfig(),
 	}
@@ -51,6 +57,7 @@ func NewConfigManagerWithPaths(configPath, protocolsPath, certDir string) *Confi
 	if cm.protocolsPath == "" {
 		cm.protocolsPath = DefaultProtocolsPath
 	}
+	cm.chainsPath = filepath.Join(filepath.Dir(cm.protocolsPath), "chains.json")
 	if cm.certDir == "" {
 		cm.certDir = DefaultCertDir
 	}
@@ -76,9 +83,10 @@ func (cm *ConfigManager) GetKeyPath() string {
 
 // sbConfig sing-box 顶层配置
 type sbConfig struct {
-	Log       sbLog        `json:"log"`
-	Inbounds  []any        `json:"inbounds"`
-	Outbounds []sbOutbound `json:"outbounds"`
+	Log       sbLog    `json:"log"`
+	Inbounds  []any    `json:"inbounds"`
+	Outbounds []any    `json:"outbounds"`
+	Route     *sbRoute `json:"route,omitempty"`
 }
 
 type sbLog struct {
@@ -89,6 +97,26 @@ type sbLog struct {
 type sbOutbound struct {
 	Type string `json:"type"`
 	Tag  string `json:"tag"`
+}
+
+type sbSSOutbound struct {
+	Type       string `json:"type"`
+	Tag        string `json:"tag"`
+	Server     string `json:"server"`
+	ServerPort int    `json:"server_port"`
+	Method     string `json:"method"`
+	Password   string `json:"password"`
+}
+
+type sbRoute struct {
+	Rules []sbRouteRule `json:"rules"`
+	Final string        `json:"final"`
+}
+
+type sbRouteRule struct {
+	Inbound  []string `json:"inbound"`
+	Action   string   `json:"action"`
+	Outbound string   `json:"outbound"`
 }
 
 // --- 各协议 inbound 结构体 ---
@@ -235,14 +263,17 @@ type sbTransport struct {
 // GenerateConfig 根据当前协议配置生成 sing-box JSON 配置
 func (cm *ConfigManager) GenerateConfig() ([]byte, error) {
 	pc := cm.Protocols
+	if pc == nil {
+		pc = DefaultProtocolConfig()
+	}
 
 	cfg := sbConfig{
 		Log: sbLog{
 			Level:     "info",
 			Timestamp: true,
 		},
-		Outbounds: []sbOutbound{
-			{Type: "direct", Tag: "direct-out"},
+		Outbounds: []any{
+			sbOutbound{Type: "direct", Tag: "direct-out"},
 		},
 	}
 
@@ -446,7 +477,77 @@ func (cm *ConfigManager) GenerateConfig() ([]byte, error) {
 		})
 	}
 
+	// Chain inbounds are deliberately separate from ordinary protocol links.
+	// Only the relay client inbound is published as a composite SS node by the panel.
+	usedPorts := make(map[int]bool)
+	for _, inbound := range cfg.Inbounds {
+		usedPorts[inboundListenPort(inbound)] = true
+	}
+	seenChains := make(map[string]bool)
+	for _, chain := range cm.Chains {
+		if err := chain.Validate(); err != nil {
+			return nil, fmt.Errorf("chain %s: %w", chain.ID, err)
+		}
+		if seenChains[chain.ID] || usedPorts[chain.ListenPort] {
+			return nil, fmt.Errorf("chain %s: duplicate ID or listen port", chain.ID)
+		}
+		seenChains[chain.ID] = true
+		usedPorts[chain.ListenPort] = true
+		if cfg.Route == nil {
+			cfg.Route = &sbRoute{Final: "direct-out"}
+		}
+
+		suffix := chain.TagSuffix()
+		if chain.Role == relaychain.RoleRelay {
+			clientTag := "chain-client-" + suffix
+			outTag := "chain-out-" + suffix
+			cfg.Inbounds = append(cfg.Inbounds, sbSSInbound{
+				Type: "shadowsocks", Tag: clientTag, Listen: "::", ListenPort: chain.ListenPort,
+				Method: chain.Method, Password: chain.Password,
+			})
+			cfg.Outbounds = append(cfg.Outbounds, sbSSOutbound{
+				Type: "shadowsocks", Tag: outTag, Server: chain.ExitIP,
+				ServerPort: chain.ExitPort, Method: chain.ExitMethod, Password: chain.ExitPassword,
+			})
+			cfg.Route.Rules = append(cfg.Route.Rules, sbRouteRule{
+				Inbound: []string{clientTag}, Action: "route", Outbound: outTag,
+			})
+		} else {
+			exitTag := "chain-exit-" + suffix
+			cfg.Inbounds = append(cfg.Inbounds, sbSSInbound{
+				Type: "shadowsocks", Tag: exitTag, Listen: "::", ListenPort: chain.ListenPort,
+				Method: chain.Method, Password: chain.Password,
+			})
+			cfg.Route.Rules = append(cfg.Route.Rules, sbRouteRule{
+				Inbound: []string{exitTag}, Action: "route", Outbound: "direct-out",
+			})
+		}
+	}
+
 	return json.MarshalIndent(cfg, "", "  ")
+}
+
+func inboundListenPort(inbound any) int {
+	switch v := inbound.(type) {
+	case sbSSInbound:
+		return v.ListenPort
+	case sbHY2Inbound:
+		return v.ListenPort
+	case sbTUICInbound:
+		return v.ListenPort
+	case sbVLESSInbound:
+		return v.ListenPort
+	case sbSocksInbound:
+		return v.ListenPort
+	case sbTrojanInbound:
+		return v.ListenPort
+	case sbAnyTLSInbound:
+		return v.ListenPort
+	case sbVMessInbound:
+		return v.ListenPort
+	default:
+		return 0
+	}
 }
 
 // GenerateAndSave 生成并保存 sing-box 配置文件
@@ -462,8 +563,11 @@ func (cm *ConfigManager) GenerateAndSave() error {
 		}
 	}
 
-	if err := os.WriteFile(cm.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(cm.configPath, data, 0600); err != nil {
 		return fmt.Errorf("写入 sing-box 配置文件失败: %w", err)
+	}
+	if err := os.Chmod(cm.configPath, 0600); err != nil {
+		return fmt.Errorf("保护 sing-box 配置文件失败: %w", err)
 	}
 
 	return nil
@@ -502,6 +606,78 @@ func (cm *ConfigManager) SaveToCache() error {
 		return fmt.Errorf("写入协议缓存失败: %w", err)
 	}
 
+	return nil
+}
+
+// LoadChainsFromCache restores chain state before the panel becomes reachable.
+func (cm *ConfigManager) LoadChainsFromCache() error {
+	data, err := os.ReadFile(cm.chainsPath)
+	if os.IsNotExist(err) {
+		cm.Chains = nil
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("读取中转链缓存失败: %w", err)
+	}
+	var chains []relaychain.Config
+	if err := json.Unmarshal(data, &chains); err != nil {
+		return fmt.Errorf("解析中转链缓存失败: %w", err)
+	}
+	old := cm.Chains
+	cm.Chains = chains
+	if _, err := cm.GenerateConfig(); err != nil {
+		cm.Chains = old
+		return fmt.Errorf("验证中转链缓存失败: %w", err)
+	}
+	return nil
+}
+
+// ReplaceChains atomically stores a complete, panel-authoritative chain set.
+func (cm *ConfigManager) ReplaceChains(chains []relaychain.Config) error {
+	old := cm.Chains
+	cm.Chains = append([]relaychain.Config(nil), chains...)
+	if _, err := cm.GenerateConfig(); err != nil {
+		cm.Chains = old
+		return err
+	}
+	if err := cm.SaveChainsToCache(); err != nil {
+		cm.Chains = old
+		return err
+	}
+	return nil
+}
+
+func (cm *ConfigManager) SaveChainsToCache() error {
+	if err := os.MkdirAll(filepath.Dir(cm.chainsPath), 0700); err != nil {
+		return fmt.Errorf("创建中转链缓存目录失败: %w", err)
+	}
+	data, err := json.MarshalIndent(cm.Chains, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化中转链缓存失败: %w", err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(cm.chainsPath), ".chains-*")
+	if err != nil {
+		return fmt.Errorf("创建中转链临时文件失败: %w", err)
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(file.Name(), cm.chainsPath); err != nil {
+		return fmt.Errorf("保存中转链缓存失败: %w", err)
+	}
 	return nil
 }
 

@@ -1172,6 +1172,13 @@
                             ><span class="rule-icon">🔗</span
                             ><span class="rule-name">自定义节点</span></a
                         >
+                        <a
+                            href="javascript:void(0)"
+                            onclick="openRelayChainsModal()"
+                            class="btn-edit-rule"
+                            ><span class="rule-icon">🔀</span
+                            ><span class="rule-name">中转链</span></a
+                        >
                     </div>
                     <p
                         style="
@@ -1742,5 +1749,6 @@
         {{template "airport_sub_modal.html" .}} {{template "logs_modal.html" .}}
         {{template "cf_modal.html" .}}
         {{template "custom_nodes_modal.html" .}}
+        {{template "relay_chains_modal.html" .}}
     </body>
 </html>

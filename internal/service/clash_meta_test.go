@@ -17,11 +17,8 @@ type renderedClashConfig struct {
 		UDP  bool   `yaml:"udp"`
 	} `yaml:"proxies"`
 	ProxyProviders map[string]struct {
-		URL      string `yaml:"url"`
-		Override struct {
-			DialerProxy string `yaml:"dialer-proxy"`
-			SkipProxy   bool   `yaml:"skip-proxy"`
-		} `yaml:"override"`
+		URL      string         `yaml:"url"`
+		Override map[string]any `yaml:"override"`
 	} `yaml:"proxy-providers"`
 	ProxyGroups []struct {
 		Name    string   `yaml:"name"`
@@ -35,14 +32,14 @@ type renderedClashConfig struct {
 
 func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	data := ClashTemplateData{
-		RelaySubURL:             "https://panel.example/sub/raw/1?token=x",
-		ExitSubURL:              "https://panel.example/sub/raw/2?token=x",
-		BaseURL:                 "https://panel.example",
-		Token:                   "x",
-		ActiveModules:           []ClashModuleDef{{Name: "Telegram", Icon: "https://example.test/telegram.svg"}, {Name: "加密货币", Icon: "💱"}},
-		ProxiesInterval:         "3600",
-		RulesInterval:           "300",
-		PublicRulesInterval:     "86400",
+		ChainSubURL:         "https://panel.example/sub/chains?token=x",
+		ExitSubURL:          "https://panel.example/sub/raw/2?token=x",
+		BaseURL:             "https://panel.example",
+		Token:               "x",
+		ActiveModules:       []ClashModuleDef{{Name: "Telegram", Icon: "https://example.test/telegram.svg", IPURL: "https://example.test/telegram-ip.mrs"}, {Name: "加密货币", Icon: "💱"}, {Name: "阻断", Type: "reject", IPURL: "https://example.test/reject-ip.mrs"}},
+		ProxiesInterval:     "3600",
+		RulesInterval:       "300",
+		PublicRulesInterval: "86400",
 	}
 	tmpl, err := template.New("clash").Parse(ClashTemplateStr)
 	if err != nil {
@@ -77,21 +74,21 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		t.Fatalf("only %d proxy groups rendered", len(config.ProxyGroups))
 	}
 	firstThree := []string{config.ProxyGroups[0].Name, config.ProxyGroups[1].Name, config.ProxyGroups[2].Name}
-	wantFirstThree := []string{"总模式", "💠 中转策略", "手动选择"}
+	wantFirstThree := []string{"总模式", "直连落地", "中转线路"}
 	for i, want := range wantFirstThree {
 		if firstThree[i] != want {
 			t.Fatalf("first groups = %v, want prefix %v", firstThree, wantFirstThree)
 		}
 	}
 
-	if config.ProxyGroups[3].Name != "Telegram" || config.ProxyGroups[4].Name != "加密货币" {
-		t.Fatalf("software groups were not placed before regions: %v %v", config.ProxyGroups[3].Name, config.ProxyGroups[4].Name)
+	if config.ProxyGroups[3].Name != "手动选择" || config.ProxyGroups[4].Name != "Telegram" || config.ProxyGroups[5].Name != "加密货币" {
+		t.Fatalf("unexpected group order: %v %v %v", config.ProxyGroups[3].Name, config.ProxyGroups[4].Name, config.ProxyGroups[5].Name)
 	}
-	if config.ProxyGroups[3].Proxies[0] != "总模式" || config.ProxyGroups[4].Proxies[0] != "总模式" {
+	if config.ProxyGroups[4].Proxies[0] != "总模式" || config.ProxyGroups[5].Proxies[0] != "总模式" {
 		t.Fatal("software policy must list 总模式 first")
 	}
-	if config.ProxyGroups[4].Icon != "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg" {
-		t.Fatalf("Crypto icon = %q", config.ProxyGroups[4].Icon)
+	if config.ProxyGroups[5].Icon != "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg" {
+		t.Fatalf("Crypto icon = %q", config.ProxyGroups[5].Icon)
 	}
 
 	wantRegions := []string{
@@ -101,7 +98,7 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		"印度地区", "印度自动", "泰国地区", "泰国自动", "法国地区", "法国自动", "中国大陆地区", "中国大陆自动",
 	}
 	for i, want := range wantRegions {
-		got := config.ProxyGroups[5+i].Name
+		got := config.ProxyGroups[6+i].Name
 		if got != want {
 			t.Fatalf("region group %d = %q, want %q", i, got, want)
 		}
@@ -113,7 +110,7 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 			t.Fatalf("duplicate policy group %q", group.Name)
 		}
 		groupByName[group.Name] = i
-		if group.Name == "默认代理" || group.Name == "自动选择" || group.Name == "💠 中转选择" {
+		if group.Name == "默认代理" || group.Name == "自动选择" || group.Name == "💠 中转选择" || group.Name == "💠 中转策略" || group.Name == "中转关闭" {
 			t.Fatalf("removed policy group is still present: %q", group.Name)
 		}
 	}
@@ -121,34 +118,24 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	relay := config.ProxyGroups[1]
-	if relay.Type != "select" || len(relay.Proxies) != 1 || relay.Proxies[0] != "中转关闭" || len(relay.Use) != 1 || relay.Use[0] != "中转机场" {
-		t.Fatalf("unexpected relay policy: %#v", relay)
+	if direct := config.ProxyGroups[1]; direct.Type != "select" || len(direct.Use) != 1 || direct.Use[0] != "落地机场" {
+		t.Fatalf("unexpected direct landing policy: %#v", direct)
 	}
-	if config.ProxyProviders["落地机场"].Override.DialerProxy != "💠 中转策略" || config.ProxyProviders["落地机场"].Override.SkipProxy {
-		t.Fatalf("unexpected landing provider override: %#v", config.ProxyProviders["落地机场"].Override)
+	if chain := config.ProxyGroups[2]; chain.Type != "select" || len(chain.Use) != 1 || chain.Use[0] != "中转链" {
+		t.Fatalf("unexpected composite chain policy: %#v", chain)
 	}
-	if got := config.ProxyProviders["中转机场"].URL; got != data.RelaySubURL {
-		t.Fatalf("中转机场 URL = %q, want %q", got, data.RelaySubURL)
+	if len(config.ProxyProviders) != 2 || len(config.ProxyProviders["落地机场"].Override) != 0 {
+		t.Fatalf("unexpected providers: %#v", config.ProxyProviders)
+	}
+	if got := config.ProxyProviders["中转链"].URL; got != data.ChainSubURL {
+		t.Fatalf("中转链 URL = %q, want %q", got, data.ChainSubURL)
 	}
 	if got := config.ProxyProviders["落地机场"].URL; got != data.ExitSubURL {
 		t.Fatalf("落地机场 URL = %q, want %q", got, data.ExitSubURL)
 	}
-	if config.ProxyGroups[0].Use[0] != "落地机场" {
-		t.Fatalf("总模式 does not expose landing nodes: %#v", config.ProxyGroups[0].Use)
-	}
-	manual := config.ProxyGroups[2]
-	if len(manual.Proxies) != 0 || len(manual.Use) != 1 || manual.Use[0] != "落地机场" {
-		t.Fatalf("手动选择 must default to landing provider, got %#v", manual)
-	}
-	var relayOffFound bool
-	for _, proxy := range config.Proxies {
-		if proxy.Name == "中转关闭" {
-			relayOffFound = proxy.Type == "direct" && proxy.UDP
-		}
-	}
-	if !relayOffFound {
-		t.Fatal("中转关闭 direct proxy missing")
+	manual := config.ProxyGroups[3]
+	if len(manual.Proxies) != 0 || len(manual.Use) != 2 || manual.Use[0] != "落地机场" || manual.Use[1] != "中转链" {
+		t.Fatalf("手动选择 must offer complete direct and composite nodes, got %#v", manual)
 	}
 	if len(config.Rules) == 0 {
 		t.Fatal("no routing rules rendered")
@@ -158,6 +145,16 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "MATCH,默认代理") {
 		t.Fatal("legacy default proxy MATCH rule is present")
+	}
+	for _, forbidden := range []string{"dialer-proxy", "type: relay", "💠 中转策略", "/sub/raw/1", "中转机场"} {
+		if strings.Contains(output.String(), forbidden) {
+			t.Fatalf("legacy client relay remains: %s", forbidden)
+		}
+	}
+	for _, rule := range []string{"RULE-SET,Telegram_IP,Telegram,no-resolve", "RULE-SET,阻断_IP,REJECT,no-resolve"} {
+		if !strings.Contains(output.String(), rule) {
+			t.Fatalf("IP RuleSet missing no-resolve: %s", rule)
+		}
 	}
 
 	if strings.Contains(output.String(), "\ntun:") || strings.Contains(output.String(), "\ndns:") {

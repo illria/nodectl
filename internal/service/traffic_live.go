@@ -475,6 +475,7 @@ func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, client
 	}
 	h.ensureNodeLiveState(installID)
 	OnNodeConnectionStatusChanged(installID, true)
+	go ReconcileRelayChainsForNode(installID)
 
 	nodeName := h.resolveNodeNameByInstallID(installID)
 	if nodeName == "" {

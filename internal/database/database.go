@@ -147,6 +147,34 @@ func (NodePool) TableName() string {
 	return "node_pool"
 }
 
+// RelayChain is a panel-managed two-hop route. Passwords are only sent to the
+// corresponding Agents and are never included in ordinary JSON API responses.
+type RelayChain struct {
+	ID              string    `gorm:"primaryKey;column:id;type:varchar(32)" json:"id"`
+	RelayNodeUUID   string    `gorm:"column:relay_node_uuid;type:varchar(36);index" json:"relay_node_uuid"`
+	ExitNodeUUID    string    `gorm:"column:exit_node_uuid;type:varchar(36);index" json:"exit_node_uuid"`
+	RelayInstallID  string    `gorm:"column:relay_install_id;type:varchar(12);index" json:"relay_install_id"`
+	ExitInstallID   string    `gorm:"column:exit_install_id;type:varchar(12);index" json:"exit_install_id"`
+	RelayName       string    `gorm:"column:relay_name" json:"relay_name"`
+	ExitName        string    `gorm:"column:exit_name" json:"exit_name"`
+	RelayIP         string    `gorm:"column:relay_ip" json:"relay_ip"`
+	ExitIP          string    `gorm:"column:exit_ip" json:"exit_ip"`
+	Enabled         bool      `gorm:"column:enabled;default:true" json:"enabled"`
+	Status          string    `gorm:"column:status;type:varchar(24);index" json:"status"`
+	LastError       string    `gorm:"column:last_error;type:text" json:"last_error"`
+	RelayListenPort int       `gorm:"column:relay_listen_port" json:"relay_listen_port"`
+	RelayMethod     string    `gorm:"column:relay_method" json:"relay_method"`
+	RelayPassword   string    `gorm:"column:relay_password" json:"-"`
+	ExitListenPort  int       `gorm:"column:exit_listen_port" json:"exit_listen_port"`
+	ExitMethod      string    `gorm:"column:exit_method" json:"exit_method"`
+	ExitPassword    string    `gorm:"column:exit_password" json:"-"`
+	CompositeLink   string    `gorm:"column:composite_link;type:text" json:"-"`
+	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (RelayChain) TableName() string { return "relay_chains" }
+
 // NodeTrafficStat 节点流量历史原始记录表（仅存储上报原始值）
 type NodeTrafficStat struct {
 	ID         uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -454,6 +482,7 @@ func openPostgres(cfg DBConfig) (*gorm.DB, error) {
 func autoMigrateAll(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&NodePool{},
+		&RelayChain{},
 		&NodeTrafficStat{},
 		&SysConfig{},
 		&AirportSub{},
@@ -573,6 +602,8 @@ func GetDBStatus() DBStatus {
 	var count int64
 	DB.Model(&NodePool{}).Count(&count)
 	status.RecordInfo["node_pool"] = count
+	DB.Model(&RelayChain{}).Count(&count)
+	status.RecordInfo["relay_chains"] = count
 	DB.Model(&NodeTrafficStat{}).Count(&count)
 	status.RecordInfo["node_traffic_stats"] = count
 	DB.Model(&SysConfig{}).Count(&count)
@@ -701,6 +732,9 @@ func MigrateToPostgres(pgCfg DBConfig) error {
 	// 4.2 迁移 NodePool
 	if err := migrateTable[NodePool](srcDB, dstDB, "node_pool"); err != nil {
 		return fmt.Errorf("迁移 node_pool 失败: %w", err)
+	}
+	if err := migrateTable[RelayChain](srcDB, dstDB, "relay_chains"); err != nil {
+		return fmt.Errorf("迁移 relay_chains 失败: %w", err)
 	}
 
 	// 4.3 迁移 NodeTrafficStat (可能数据量大，分批处理)
@@ -881,6 +915,7 @@ func VacuumTable(tableName string) error {
 	// 表名白名单，防止 SQL 注入
 	allowed := map[string]bool{
 		"node_pool":                    true,
+		"relay_chains":                 true,
 		"node_traffic_stats":           true,
 		"sys_config":                   true,
 		"airport_subs":                 true,

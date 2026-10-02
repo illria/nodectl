@@ -29,6 +29,8 @@ import (
 // Agent 首次启动时从后端拉取协议配置（启用列表 + 端口映射）
 // 密钥/密码/UUID 等凭据由 Agent 本地生成，面板不负责下发
 func apiAgentInitConfig(w http.ResponseWriter, r *http.Request) {
+	// The response may contain per-chain credentials; intermediaries must not cache it.
+	w.Header().Set("Cache-Control", "no-store")
 	installID := strings.TrimSpace(r.URL.Query().Get("install_id"))
 	if installID == "" {
 		sendJSON(w, "error", "install_id is required")
@@ -87,6 +89,12 @@ func apiAgentInitConfig(w http.ResponseWriter, r *http.Request) {
 
 	// 🆕 从 SysConfig 加载自定义 SNI 配置，下发给 Agent
 	sniConfig := loadSNIConfig()
+	chains, err := service.AgentRelayChains(installID)
+	if err != nil {
+		logger.Log.Error("Agent init-config: 读取中转链失败", "install_id", installID, "error", err)
+		sendJSON(w, "error", "failed to load chains")
+		return
+	}
 
 	sendJSON(w, "success", map[string]interface{}{
 		"data": map[string]interface{}{
@@ -95,6 +103,7 @@ func apiAgentInitConfig(w http.ResponseWriter, r *http.Request) {
 			},
 			"ports":     ports,
 			"sni":       sniConfig,
+			"chains":    chains,
 			"panel_url": panelURL,
 			"ws_url":    wsURL,
 		},
