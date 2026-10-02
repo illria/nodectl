@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.8
-  AGENT_VERSION: v0.2.77
+  VERSION: v0.4.76-custom.9
+  AGENT_VERSION: v0.2.78
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,18 +135,15 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.8
-            - 根据已验证不泄漏的 Mihomo Party 配置重构为 Minimal Profile
-            - 删除 mixed-port / redir-port / tproxy-port / ipv6 / mode / allow-lan 等运行时字段
-            - 删除 geodata / experimental / profile / sniffer 等客户端运行时覆盖
-            - 继续不下发 dns: 与 tun:
-            - 删除 proxy_groups / rule-anchor 这类非必要顶层辅助键，改由模板展开
-            - STUN/WebRTC、私网与 CN 规则写法对齐已验证工作配置：REJECT / DIRECT / GEOSITE / GEOIP
-            - 删除 browserleaks 特殊规则和额外 CN/Private rule-provider
-            - 保留总模式、中转策略、地区策略、机场自动更新与落地 dialer-proxy
+            ### v0.4.76-custom.9
+            - 由 NodeCTL Agent/sing-box 在服务端实现 Shadowsocks 2022 Relay → Exit 双跳
+            - 主订阅只发布直连落地及普通 SS 中转链节点，移除客户端 dialer-proxy
+            - 中转链配置在 Agent 本地持久化，重启后与面板状态对齐
+            - IP RuleSet 自动追加 no-resolve，保留 Minimal Profile 与客户端 DNS/TUN 设置
+            - Agent 升级到 v0.2.78
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.8`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.9`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -157,7 +154,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.8' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

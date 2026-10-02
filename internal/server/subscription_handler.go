@@ -48,11 +48,11 @@ func apiSubClash(w http.ResponseWriter, r *http.Request) {
 	baseURL := getBaseURL(r)
 	token := r.URL.Query().Get("token")
 
-	// routing_type=1 是中转节点，routing_type=2 是落地节点。
-	relayURL := fmt.Sprintf("%s/sub/raw/1?token=%s", baseURL, token)
+	// The main profile only uses ordinary exit nodes and completed server-side chains.
+	chainURL := fmt.Sprintf("%s/sub/chains?token=%s", baseURL, token)
 	exitURL := fmt.Sprintf("%s/sub/raw/2?token=%s", baseURL, token)
 
-	yamlContent, err := service.RenderClashConfig(relayURL, exitURL, baseURL, token)
+	yamlContent, err := service.RenderClashConfig(chainURL, exitURL, baseURL, token)
 	if err != nil {
 		logger.Log.Error("生成 Clash 订阅模板失败", "error", err, "ip", clientIP, "path", reqPath)
 		http.Error(w, "模板生成失败", http.StatusInternalServerError)
@@ -152,6 +152,21 @@ func apiSubRaw(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Write([]byte(yamlContent))
+}
+
+func apiSubChains(w http.ResponseWriter, r *http.Request) {
+	if !verifySubToken(r) {
+		http.Error(w, "Invalid Token", http.StatusForbidden)
+		return
+	}
+	yamlContent, err := service.GenerateChainNodesYAML()
+	if err != nil {
+		logger.Log.Error("生成中转链节点列表失败", "error", err)
+		http.Error(w, "节点生成失败", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	_, _ = w.Write([]byte(yamlContent))
 }
 
 // ------------------- [自定义分流规则 API] -------------------

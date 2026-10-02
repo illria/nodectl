@@ -10,7 +10,7 @@ package agent
 import "strings"
 
 var (
-	// AgentVersion agent 语义化版本号（由 CI 注入）
+	// AgentVersion agent 语义化版本号（custom.9 构建注入 v0.2.78）
 	AgentVersion = "dev"
 	// GitCommit 构建时的 git commit SHA（短）
 	GitCommit = "unknown"

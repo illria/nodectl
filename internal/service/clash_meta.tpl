@@ -1,15 +1,4 @@
 proxy-providers:
-  中转机场:
-    type: http
-    interval: {{.ProxiesInterval}}
-    url: "{{.RelaySubURL}}"
-    path: ./proxy_providers/clash-node.yaml
-    health-check:
-      enable: true
-      url: https://www.gstatic.com/generate_204
-      interval: 300
-    override:
-      udp: true
   落地机场:
     type: http
     interval: {{.ProxiesInterval}}
@@ -21,13 +10,21 @@ proxy-providers:
       interval: 300
     override:
       udp: true
-      dialer-proxy: '💠 中转策略'
-      skip-proxy: false
+  中转链:
+    type: http
+    interval: {{.ProxiesInterval}}
+    url: "{{.ChainSubURL}}"
+    path: ./proxy_providers/chains.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    override:
+      udp: true
 
 proxies:
     - {name: 🇨🇳 大陆, type: direct, udp: true}
     - {name: ⛔️ 拒绝连接, type: reject}
-    - {name: 中转关闭, type: direct, udp: true}
 
 # -------------------- 软件策略通用选项 --------------------
 # 软件模块可以选择总模式、手动/地区策略或直连/拒绝，不引用自身或 GLOBAL。
@@ -35,6 +32,8 @@ proxies:
     type: select
     proxies:
       - 总模式
+      - 直连落地
+      - 中转线路
       - 手动选择
       - 香港地区
       - 香港自动
@@ -73,13 +72,15 @@ proxies:
 {{end}}
 
 # -------------------- 策略组自动生成 --------------------
-# 客户端策略组顺序：总模式、中转、手动、软件模块、地区/自动成对、辅助组。
+# 客户端只选择完整线路；地区组继续使用直连落地 Provider。
 proxy-groups:
   - name: 总模式
     icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/All.svg"
     type: select
     proxies:
       - 手动选择
+      - 直连落地
+      - 中转线路
       - 香港地区
       - 香港自动
       - 日本地区
@@ -114,20 +115,21 @@ proxy-groups:
       - 中国大陆自动
       - 🇨🇳 大陆
       - ⛔️ 拒绝连接
+  - name: 直连落地
+    type: select
     use:
       - 落地机场
 
-  - name: '💠 中转策略'
+  - name: 中转线路
     type: select
-    proxies:
-      - 中转关闭
     use:
-      - 中转机场
+      - 中转链
 
   - name: 手动选择
     type: select
     use:
       - 落地机场
+      - 中转链
 
 {{range .ActiveModules}}
   {{if ne .Type "reject"}}
@@ -413,6 +415,8 @@ proxy-groups:
     type: select
     proxies:
       - 总模式
+      - 直连落地
+      - 中转线路
 {{range .ActiveModules}}
   {{if ne .Type "reject"}}
       - {{.Name}}
@@ -546,8 +550,8 @@ rules:
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - DOMAIN-SUFFIX,local,DIRECT
 
-  - RULE-SET,我的直连规则,DIRECT
-  - RULE-SET,WebRTC_端/域,REJECT
+  - RULE-SET,我的直连规则,DIRECT,no-resolve
+  - RULE-SET,WebRTC_端/域,REJECT,no-resolve
 
 {{range .ActiveModules}}
   {{if eq .Type "reject"}}
@@ -559,15 +563,15 @@ rules:
   - RULE-SET,{{.Name}}_域,{{$target}}
   {{end}}
   {{if .IPURL}}
-  - RULE-SET,{{.Name}}_IP,{{$target}}
+  - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
-  - RULE-SET,{{.Name}}_用户自定义,{{$target}}
+  - RULE-SET,{{.Name}}_用户自定义,{{$target}},no-resolve
   {{end}}
   {{end}}
 {{end}}
 {{range .CustomProxies}}
-  - RULE-SET,{{.Name}}_自定义分流,{{.Name}}
+  - RULE-SET,{{.Name}}_自定义分流,{{.Name}},no-resolve
 {{end}}
 
 {{range .ActiveModules}}
@@ -580,10 +584,10 @@ rules:
   - RULE-SET,{{.Name}}_域,{{$target}}
   {{end}}
   {{if .IPURL}}
-  - RULE-SET,{{.Name}}_IP,{{$target}}
+  - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
-  - RULE-SET,{{.Name}}_用户自定义,{{$target}}
+  - RULE-SET,{{.Name}}_用户自定义,{{$target}},no-resolve
   {{end}}
   {{end}}
 {{end}}

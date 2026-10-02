@@ -48,6 +48,13 @@ func apiUpdateNode(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, "error", "节点不存在")
 		return
 	}
+	if targetNode.RoutingType != req.RoutingType || targetNode.IPV4 != req.IPV4 || targetNode.IPV6 != req.IPV6 {
+		inUse, err := service.RelayChainNodeInUse(req.UUID)
+		if err != nil || inUse {
+			sendJSON(w, "error", "该节点仍用于服务端中转链；请先删除中转链并等待 Agent 清理完成")
+			return
+		}
+	}
 
 	// 记录更新前快照，用于输出精确变更日志
 	oldNode := targetNode
@@ -1490,6 +1497,11 @@ func apiReorderNodes(w http.ResponseWriter, r *http.Request) {
 	movedDetails := make([]string, 0)
 	for _, uuid := range req.NodeUUIDs {
 		if old, ok := oldByUUID[uuid]; ok && old.RoutingType != req.TargetRoutingType {
+			inUse, err := service.RelayChainNodeInUse(uuid)
+			if err != nil || inUse {
+				sendJSON(w, "error", "节点仍用于服务端中转链；请先删除中转链并等待 Agent 清理完成")
+				return
+			}
 			name := strings.TrimSpace(old.Name)
 			if name == "" {
 				name = old.UUID
@@ -1603,6 +1615,10 @@ func apiDeleteNode(w http.ResponseWriter, r *http.Request) {
 	if err := database.DB.Where("uuid = ?", req.UUID).First(&targetNode).Error; err != nil {
 		logger.Log.Warn("删除拦截: 节点不存在", "uuid", req.UUID, "ip", clientIP, "path", reqPath)
 		sendJSON(w, "error", "节点不存在")
+		return
+	}
+	if inUse, err := service.RelayChainNodeInUse(req.UUID); err != nil || inUse {
+		sendJSON(w, "error", "节点仍用于服务端中转链；请先删除中转链并等待 Agent 清理完成")
 		return
 	}
 

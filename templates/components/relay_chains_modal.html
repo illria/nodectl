@@ -1,0 +1,119 @@
+{{define "relay_chains_modal.html"}}
+<style>
+    #relay-chain-modal { display: none; position: fixed; inset: 0; z-index: 3500; background: rgba(0,0,0,.45); align-items: center; justify-content: center; padding: 18px; }
+    #relay-chain-modal.open { display: flex; }
+    .relay-chain-card { width: min(720px, 100%); max-height: 85vh; overflow: auto; background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,.2); }
+    .relay-chain-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .relay-chain-head h2 { font-size: 18px; }
+    .relay-chain-close { border: 0; background: transparent; font-size: 25px; cursor: pointer; }
+    .relay-chain-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+    .relay-chain-fields label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+    .relay-chain-fields select { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+    .relay-chain-button { border: 0; border-radius: 8px; background: #007aff; color: #fff; padding: 10px 14px; cursor: pointer; }
+    .relay-chain-button.secondary { background: #e5e7eb; color: #1d1d1f; }
+    .relay-chain-button.danger { background: #ff3b30; }
+    .relay-chain-button:disabled { opacity: .55; cursor: wait; }
+    #relay-chain-message { min-height: 18px; margin: 12px 0; font-size: 13px; }
+    #relay-chain-list { display: grid; gap: 10px; margin-top: 12px; }
+    .relay-chain-row { border: 1px solid #e5e5ea; border-radius: 9px; padding: 12px; display: grid; gap: 8px; }
+    .relay-chain-row strong { font-size: 14px; }
+    .relay-chain-row small { color: #666; }
+    .relay-chain-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 600px) { .relay-chain-fields { grid-template-columns: 1fr; } }
+</style>
+<div id="relay-chain-modal" role="dialog" aria-modal="true" aria-label="服务端中转链">
+    <div class="relay-chain-card">
+        <div class="relay-chain-head">
+            <h2>服务端中转链</h2>
+            <button class="relay-chain-close" type="button" onclick="closeRelayChainsModal()" aria-label="关闭">×</button>
+        </div>
+        <p>选择两个 NodeCTL Agent 节点。客户端只会收到一个普通 Shadowsocks 节点。</p>
+        <div class="relay-chain-fields">
+            <label>中转 Agent<select id="relay-chain-relay"></select></label>
+            <label>落地 Agent<select id="relay-chain-exit"></select></label>
+        </div>
+        <button id="relay-chain-create" class="relay-chain-button" type="button" onclick="createRelayChainFromModal()">创建中转链</button>
+        <div id="relay-chain-message" role="status"></div>
+        <h3>已有线路</h3>
+        <div id="relay-chain-list"></div>
+    </div>
+</div>
+<script>
+    async function relayChainRequest(path, body) {
+        const response = await fetch(path, body === undefined ? { credentials: 'same-origin' } : {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') throw new Error(data.message || '请求失败');
+        return data;
+    }
+    function relayChainMessage(message, error) {
+        const el = document.getElementById('relay-chain-message');
+        el.textContent = message;
+        el.style.color = error ? '#c62828' : '#16803c';
+    }
+    function relayChainOption(select, node) {
+        const option = document.createElement('option');
+        option.value = node.uuid;
+        option.textContent = node.name + (node.ipv4 || node.ipv6 ? ' (' + (node.ipv4 || node.ipv6) + ')' : ' (等待上报 IP)');
+        select.appendChild(option);
+    }
+    async function loadRelayChainModal() {
+        try {
+            const [options, listing] = await Promise.all([
+                relayChainRequest('/api/relay-chains/options'),
+                relayChainRequest('/api/relay-chains/list')
+            ]);
+            const relay = document.getElementById('relay-chain-relay');
+            const exit = document.getElementById('relay-chain-exit');
+            relay.replaceChildren(); exit.replaceChildren();
+            for (const node of options.nodes || []) {
+                if (node.routing_type === 1) relayChainOption(relay, node);
+                if (node.routing_type === 2) relayChainOption(exit, node);
+            }
+            const list = document.getElementById('relay-chain-list');
+            list.replaceChildren();
+            for (const chain of listing.chains || []) {
+                const row = document.createElement('div'); row.className = 'relay-chain-row';
+                const title = document.createElement('strong'); title.textContent = chain.relay_name + ' → ' + chain.exit_name;
+                const details = document.createElement('small');
+                details.textContent = '状态：' + chain.status + ' · 中转端口 ' + chain.relay_listen_port + ' · 落地内部端口 ' + chain.exit_listen_port;
+                row.append(title, details);
+                if (chain.last_error) { const error = document.createElement('small'); error.textContent = chain.last_error; row.appendChild(error); }
+                const actions = document.createElement('div'); actions.className = 'relay-chain-actions';
+                const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'relay-chain-button secondary'; retry.textContent = '重试';
+                retry.onclick = () => updateRelayChainFromModal('retry', chain.id);
+                const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'relay-chain-button danger'; remove.textContent = '删除';
+                remove.onclick = () => { if (confirm('删除这条中转链？离线 Agent 重连后会继续清理。')) updateRelayChainFromModal('delete', chain.id); };
+                actions.append(retry, remove); row.appendChild(actions); list.appendChild(row);
+            }
+            if (!listing.chains || !listing.chains.length) list.textContent = '尚未创建中转链。';
+        } catch (error) { relayChainMessage(error.message, true); }
+    }
+    function openRelayChainsModal() {
+        document.getElementById('relay-chain-modal').classList.add('open');
+        relayChainMessage('', false);
+        loadRelayChainModal();
+    }
+    function closeRelayChainsModal() { document.getElementById('relay-chain-modal').classList.remove('open'); }
+    async function createRelayChainFromModal() {
+        const button = document.getElementById('relay-chain-create'); button.disabled = true;
+        try {
+            const relay_uuid = document.getElementById('relay-chain-relay').value;
+            const exit_uuid = document.getElementById('relay-chain-exit').value;
+            const result = await relayChainRequest('/api/relay-chains/create', { relay_uuid, exit_uuid });
+            relayChainMessage('已创建：' + result.chain.status, false);
+            await loadRelayChainModal();
+        } catch (error) { relayChainMessage(error.message, true); }
+        finally { button.disabled = false; }
+    }
+    async function updateRelayChainFromModal(action, id) {
+        try {
+            await relayChainRequest('/api/relay-chains/' + action, { id });
+            relayChainMessage(action === 'retry' ? '已重试' : '已提交删除', false);
+            await loadRelayChainModal();
+        } catch (error) { relayChainMessage(error.message, true); }
+    }
+</script>
+{{end}}

@@ -117,19 +117,19 @@ func SaveActiveClashModules(modules []string) error {
 
 // Clash 模板渲染逻辑
 type ClashTemplateData struct {
-	RelaySubURL             string
-	ExitSubURL              string
-	BaseURL                 string
-	Token                   string
-	ActiveModules           []ClashModuleDef
-	GlobalDirectIcon        string
-	CustomProxies           []CustomProxyRule
-	ProxiesInterval         string
-	RulesInterval           string
-	PublicRulesInterval     string
+	ChainSubURL         string
+	ExitSubURL          string
+	BaseURL             string
+	Token               string
+	ActiveModules       []ClashModuleDef
+	GlobalDirectIcon    string
+	CustomProxies       []CustomProxyRule
+	ProxiesInterval     string
+	RulesInterval       string
+	PublicRulesInterval string
 }
 
-func RenderClashConfig(relayURL, exitURL, baseURL, token string) (string, error) {
+func RenderClashConfig(chainURL, exitURL, baseURL, token string) (string, error) {
 	activeNames := GetActiveClashModules()
 	activeMap := make(map[string]bool)
 	for _, n := range activeNames {
@@ -188,16 +188,16 @@ func RenderClashConfig(relayURL, exitURL, baseURL, token string) (string, error)
 	}
 
 	data := ClashTemplateData{
-		RelaySubURL:             relayURL,
-		ExitSubURL:              exitURL,
-		ActiveModules:           finalActiveMods,
-		BaseURL:                 baseURL,
-		Token:                   token,
-		GlobalDirectIcon:        getEmojiURL(GetCustomDirectIcon()),
-		CustomProxies:           validCustomProxies, // 替换为过滤后的有效分组
-		ProxiesInterval:         proxiesInterval,
-		RulesInterval:           rulesInterval,
-		PublicRulesInterval:     publicRulesInterval,
+		ChainSubURL:         chainURL,
+		ExitSubURL:          exitURL,
+		ActiveModules:       finalActiveMods,
+		BaseURL:             baseURL,
+		Token:               token,
+		GlobalDirectIcon:    getEmojiURL(GetCustomDirectIcon()),
+		CustomProxies:       validCustomProxies, // 替换为过滤后的有效分组
+		ProxiesInterval:     proxiesInterval,
+		RulesInterval:       rulesInterval,
+		PublicRulesInterval: publicRulesInterval,
 	}
 
 	tmpl, err := template.New("clash").Parse(ClashTemplateStr)

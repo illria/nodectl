@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.8`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 开发分支目标版本：**`v0.4.76-custom.9`**（尚未发布）｜ 当前稳定版：`v0.4.76-custom.8` ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -19,7 +19,7 @@
 - 想要一个简洁直观的面板来统一管理所有代理服务？
 - 拥有托管在 Cloudflare 的域名，想充分利用 CF 的能力？
 - 没有公网，不会配置tunnel隧道，没有双栈服务器？
-- 想用机场节点做中转，又不会配置？
+- 想用两台自建 NodeCTL Agent 节点组成服务端中转线路？
 
 那么 **NodeCtl** 就是为你量身打造的解决方案！
 
@@ -132,13 +132,29 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 
 ---
 
+## custom.9 服务端中转（开发中）
+
+面板选择 `routing_type=1` 的 NodeCTL Agent 作为 Relay，选择 `routing_type=2` 的 NodeCTL Agent 作为 Exit。创建后，Exit Agent 建立隐藏 Shadowsocks 2022 入站并直出；Relay Agent 建立客户端 SS 入站和连接 Exit IP 的 SS 出站。普通订阅只发布 `Relay → Exit` 这一个 SS 节点，客户端不使用 `dialer-proxy`。机场节点和外部自定义节点暂不支持作为服务端 Exit。
+
+Agent v0.2.78 将链配置保存到 `/var/lib/nodectl-agent/chains.json`，重启时先读取缓存；每次安全 WebSocket（WSS）连接成功后，面板通过现有 command 通道发送完整 `chain-sync` 权威集合（包括空数组）；`chain-sync` / `chain-apply` 必须通过 TLS 或可信反向代理标记的 HTTPS/WSS 连接，普通 WS 不下发链密钥，HTTP `/api/agent/init-config` 仅返回协议、端口和连接元数据，不包含链配置或密钥。Relay 应用链配置后会探测 Exit TCP 端口，探测失败的链不会进入 active；创建链要求两端 Agent >= v0.2.78。目标正式版本是 `v0.4.76-custom.9`；人工审核完成前不要将本分支当成已发布版本使用。
+
+### custom.9 Staging
+
+`.github/workflows/stage-custom9.yml` 只接受手动 `workflow_dispatch`，只允许 `feat/server-side-relay-v9`，并固定构建本次运行的 HEAD SHA。Panel 为 `v0.4.76-custom.9-rc`，Agent 为 `v0.2.78-rc`；仅 RC 面板额外接受此指定 RC Agent，正式面板仍要求 Agent >= `v0.2.78`。
+
+运行提供 1 天有效的四个 artifacts：`nodectl-linux-amd64`、`nodectl-linux-arm64`、`nodectl-agent-linux-amd64-v0.2.78-rc`、`nodectl-agent-linux-arm64-v0.2.78-rc`，并只推送临时 Docker tag `ghcr.io/illria/nodectl:custom9-rc`。Staging 不创建 Release 或 git tag，不覆盖正式 Docker tags。
+
+临时 Docker 镜像内置两个 RC Agent，设置 `NODECTL_STAGING_AGENT_DIR=/app/staging-agents`。只有精确的 `v0.4.76-custom.9-rc` 面板在该目录存在时，安装脚本的 `/api/public/download/agent` 请求才从镜像内分发 `v0.2.78-rc`；文件缺失会报错。正式版本继续从 GitHub Release 查找 Agent。
+
+---
+
 ## 🚀 三分钟快速部署
 
 > **重要：本仓库已经独立发布。**
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.8`；当前稳定版为 `v0.4.76-custom.8`。
+> `v0.4.76-custom.9` 正在 `feat/server-side-relay-v9` 开发；当前可安装稳定版为 `v0.4.76-custom.8`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -259,13 +275,13 @@ nodectl-windows-amd64.exe
 nodectl-windows-arm64.exe
 ```
 
-Agent 包：
+custom.9 目标 Agent 包（v0.2.78，尚未发布）：
 
 ```text
-nodectl-agent-linux-amd64-v0.2.77
-nodectl-agent-linux-amd64-v0.2.77.sha256
-nodectl-agent-linux-arm64-v0.2.77
-nodectl-agent-linux-arm64-v0.2.77.sha256
+nodectl-agent-linux-amd64-v0.2.78
+nodectl-agent-linux-amd64-v0.2.78.sha256
+nodectl-agent-linux-arm64-v0.2.78
+nodectl-agent-linux-arm64-v0.2.78.sha256
 ```
 
 所有正式包统一从这里获取：
@@ -294,7 +310,7 @@ docker run -d \
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.8` |
+| custom.9 目标 Docker（尚未发布） | `ghcr.io/illria/nodectl:v0.4.76-custom.9` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |

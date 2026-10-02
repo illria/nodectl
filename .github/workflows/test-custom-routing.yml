@@ -3,7 +3,7 @@ name: Test Custom Routing Changes
 on:
   push:
     branches:
-      - feat/custom-routing-v4
+      - feat/server-side-relay-v9
       - fix/dns-egress-v5
       - fix/dns-enforcement-v6
       - fix/client-managed-dns-v7
@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.8
-  AGENT_VERSION: v0.2.77
+  VERSION: v0.4.76-custom.9
+  AGENT_VERSION: v0.2.78
 
 concurrency:
   group: test-custom-routing-${{ github.ref }}
@@ -37,9 +37,9 @@ jobs:
 
       - name: Verify prepared Agent version
         run: |
-          grep -Fq 'AGENT_VERSION: v0.2.77' .github/workflows/publish-custom-release.yml
-          grep -Fq 'nodectl-agent-linux-amd64-v0.2.77' README.md
-          grep -Fq 'nodectl-agent-linux-arm64-v0.2.77' README.md
+          grep -Fq 'AGENT_VERSION: v0.2.78' .github/workflows/publish-custom-release.yml
+          grep -Fq 'nodectl-agent-linux-amd64-v0.2.78' README.md
+          grep -Fq 'nodectl-agent-linux-arm64-v0.2.78' README.md
 
       - name: Run Go tests
         run: go test ./...

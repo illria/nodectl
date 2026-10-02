@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -31,13 +32,14 @@ const fixedWSPushIntervalSec = 2
 
 // Runtime Agent 运行时：调度采集与上报，管理信号与生命周期
 type Runtime struct {
-	cfg            *Config
-	collector      *Collector
-	reporter       *Reporter
-	updater        *Updater
-	logDedup       *LogDedup
-	cancel         context.CancelFunc
-	bootID         string
+	cfg       *Config
+	collector *Collector
+	reporter  *Reporter
+	updater   *Updater
+	logDedup  *LogDedup
+	cancel    context.CancelFunc
+	bootID    string
+	configMu  sync.Mutex
 
 	// 🆕 sing-box 管理模块
 	singboxMgr *singbox.Manager
@@ -215,13 +217,17 @@ func (rt *Runtime) createSingboxManager() *singbox.Manager {
 }
 
 // initSingBox 🆕 初始化 sing-box 管理器并尝试启动
-// 配置加载优先级：
+// 首先加载 chains.json，保留离线可用的链；完整权威集合仅通过 WS chain-sync 下发。
+// 普通协议配置加载优先级：
 //  1. Config.Protocols（主配置文件中的协议配置）
 //  2. protocols.json 缓存文件
 //  3. 🆕 主动从面板拉取初始化配置（使用 install_id）
 //  4. 等待后端通过 WS 下发（最终兜底）
 func (rt *Runtime) initSingBox(ctx context.Context) {
 	cfgMgr := rt.singboxMgr.GetConfigManager()
+	if err := cfgMgr.LoadChainsFromCache(); err != nil {
+		log.Printf("[Agent] 加载中转链缓存失败: %v", err)
+	}
 
 	// 优先级 1：检查主配置文件中是否已有协议配置
 	if rt.cfg.Protocols != nil && len(rt.cfg.Protocols.EnabledProtocolList()) > 0 {
@@ -243,7 +249,10 @@ func (rt *Runtime) initSingBox(ctx context.Context) {
 			pc, fetchErr := rt.fetchAndBuildProtocolConfig(ctx)
 			if fetchErr != nil {
 				log.Printf("[Agent] 从面板拉取初始化配置失败: %v（等待后端通过 WS 下发）", fetchErr)
-				return
+				if len(cfgMgr.Chains) == 0 {
+					return
+				}
+				pc = singbox.DefaultProtocolConfig()
 			}
 			cfgMgr.Protocols = pc
 			rt.cfg.Protocols = pc
@@ -328,9 +337,9 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 	}
 
 	apiURL := fmt.Sprintf("%s/api/agent/init-config?install_id=%s",
-		strings.TrimRight(panelURL, "/"), rt.cfg.InstallID)
+		strings.TrimRight(panelURL, "/"), url.QueryEscape(rt.cfg.InstallID))
 
-	log.Printf("[Agent] 正在从面板拉取初始化配置: %s", apiURL)
+	log.Printf("[Agent] 正在从面板拉取初始化配置")
 
 	// 2. 发起 HTTP 请求（带超时，跳过自签证书验证）
 	client := &http.Client{
@@ -348,13 +357,15 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if requestErr, ok := err.(*url.Error); ok {
+			err = requestErr.Err // Do not log the init-config URL or install_id.
+		}
 		return nil, fmt.Errorf("请求面板失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("面板返回非 200: %d, body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("面板返回非 200: %d", resp.StatusCode)
 	}
 
 	// 3. 解析响应
@@ -384,10 +395,6 @@ func (rt *Runtime) fetchAndBuildProtocolConfig(ctx context.Context) (*singbox.Pr
 	enabledProtocols := apiResp.Data.Protocols.Enabled
 	ports := apiResp.Data.Ports
 	sniMap := apiResp.Data.SNI
-
-	if len(enabledProtocols) == 0 {
-		return nil, fmt.Errorf("面板返回的启用协议列表为空（节点可能尚未配置协议）")
-	}
 
 	log.Printf("[Agent] 面板返回: 启用协议=%v, 端口=%v, sni=%v", enabledProtocols, ports, sniMap)
 
@@ -808,6 +815,12 @@ func (rt *Runtime) handleCommand(cmd ServerCommand, reply func(CommandResult)) {
 		Status: "ok",
 		Stage:  "命令已接收",
 	})
+	// Reporter has two command workers. Config mutations must remain serial.
+	switch cmd.Action {
+	case "reset-links", "reinstall-singbox", "push-config", "chain-apply", "chain-delete", "chain-sync":
+		rt.configMu.Lock()
+		defer rt.configMu.Unlock()
+	}
 
 	switch cmd.Action {
 	case "reset-links":
@@ -824,6 +837,12 @@ func (rt *Runtime) handleCommand(cmd ServerCommand, reply func(CommandResult)) {
 		rt.executeTunnelPrepare(cmd, reply)
 	case "tunnel-stop":
 		rt.executeTunnelStop(reply)
+	case "chain-apply":
+		rt.executeChainApply(cmd, reply)
+	case "chain-delete":
+		rt.executeChainDelete(cmd, reply)
+	case "chain-sync":
+		rt.executeChainSync(cmd, reply)
 	default:
 		reply(CommandResult{
 			Type:    "result",
