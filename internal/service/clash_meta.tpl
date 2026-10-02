@@ -114,31 +114,408 @@ proxies:
     - {name: 🌐 DNS_Hijack, type: dns}
 
 # -------------------- 策略组锚点定义 --------------------
+# 个人地区策略：保留 NodeCTL 的中转/落地模型，同时复刻原配置的地区自动/手动选择逻辑。
 proxy_groups: &proxy_groups
   type: select
   proxies:
-    - 总模式
+    - 默认代理
+    - 自动选择
+    - 手动选择
+    - 香港地区
+    - 日本地区
+    - 新加坡地区
+    - 美国地区
+    - 英国地区
+    - 德国地区
+    - 台湾地区
+    - 韩国地区
+    - 荷兰地区
+    - 波兰地区
+    - 摩尔多瓦地区
+    - 芬兰地区
+    - 印度地区
+    - 泰国地区
+    - 法国地区
+    - 中国大陆地区
     - 🇨🇳 大陆
     - ⛔️ 拒绝连接
-  use:
-    - 中转机场
-    - 落地机场
 
 # -------------------- 策略组自动生成 --------------------
 proxy-groups:
-  - name: 总模式
-    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/All.svg"
+  - name: '💠 中转选择'
     type: select
     proxies:
       - 🇨🇳 大陆
     use:
       - 中转机场
+
+  # 原配置“自动选择”仅筛选香港节点；保留原有行为。
+  - name: 自动选择
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(香港|^HK|^🇭🇰)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 手动选择
+    type: select
+    proxies:
+      - 🇨🇳 大陆
+    use:
       - 落地机场
 
-  - name: '💠 中转选择'
-    type: select
+  - name: 香港自动
+    type: url-test
     use:
-      - 中转机场
+      - 落地机场
+    filter: "(?i)(香港|^HK|^🇭🇰)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 香港地区
+    type: select
+    proxies:
+      - 香港自动
+    use:
+      - 落地机场
+    filter: "(?i)(香港|HK|Hong Kong)"
+
+  - name: 日本自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(日本|^JP|^🇯🇵)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 日本地区
+    type: select
+    proxies:
+      - 日本自动
+    use:
+      - 落地机场
+    filter: "(?i)(日本|JP|Japan)"
+
+  - name: 新加坡自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(新加坡|^SG|^🇸🇬)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 新加坡地区
+    type: select
+    proxies:
+      - 新加坡自动
+    use:
+      - 落地机场
+    filter: "(?i)(新加坡|SG|Singapore)"
+
+  - name: 美国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(美国|^🇺🇸)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 美国地区
+    type: select
+    proxies:
+      - 美国自动
+    use:
+      - 落地机场
+    filter: "(?i)(美国|US|USA|United States)"
+
+  - name: 英国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(英国|^🇬🇧)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 英国地区
+    type: select
+    proxies:
+      - 英国自动
+    use:
+      - 落地机场
+    filter: "(?i)(英国|UK|United Kingdom)"
+
+  - name: 德国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(德国|^🇩🇪)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 德国地区
+    type: select
+    proxies:
+      - 德国自动
+    use:
+      - 落地机场
+    filter: "(?i)(德国|DE|Germany)"
+
+  - name: 台湾自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(台湾|^🇹🇼)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 台湾地区
+    type: select
+    proxies:
+      - 台湾自动
+    use:
+      - 落地机场
+    filter: "(?i)(台湾|TW|Taiwan)"
+
+  - name: 韩国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(韩国|^🇰🇷)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 韩国地区
+    type: select
+    proxies:
+      - 韩国自动
+    use:
+      - 落地机场
+    filter: "(?i)(韩国|KR|Korea)"
+
+  - name: 荷兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(荷兰|^🇳🇱)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 荷兰地区
+    type: select
+    proxies:
+      - 荷兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(荷兰|NL|Netherlands)"
+
+  - name: 波兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(波兰|^🇵🇱)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 波兰地区
+    type: select
+    proxies:
+      - 波兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(波兰|PL|Poland)"
+
+  - name: 摩尔多瓦自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(摩尔多瓦|^🇲🇩)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 摩尔多瓦地区
+    type: select
+    proxies:
+      - 摩尔多瓦自动
+    use:
+      - 落地机场
+    filter: "(?i)(摩尔多瓦|Moldova)"
+
+  - name: 芬兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(芬兰|^🇫🇮)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 芬兰地区
+    type: select
+    proxies:
+      - 芬兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(芬兰|Finland)"
+
+  - name: 印度自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(印度|^🇮🇳)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 印度地区
+    type: select
+    proxies:
+      - 印度自动
+    use:
+      - 落地机场
+    filter: "(?i)(印度|IN|India)"
+
+  - name: 泰国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(泰国|^🇹🇭)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 泰国地区
+    type: select
+    proxies:
+      - 泰国自动
+    use:
+      - 落地机场
+    filter: "(?i)(泰国|TH|Thailand)"
+
+  - name: 法国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(法国|KataBump|^🇫🇷)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 法国地区
+    type: select
+    proxies:
+      - 法国自动
+    use:
+      - 落地机场
+    filter: "(?i)(法国|FR|France|KataBump)"
+
+  - name: 中国大陆自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(北京|乌兰察布|大陆)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 中国大陆地区
+    type: select
+    proxies:
+      - 中国大陆自动
+    use:
+      - 落地机场
+    filter: "(?i)(北京|乌兰察布|大陆)"
+
+  - name: 默认代理
+    type: select
+    proxies:
+      - 自动选择
+      - 手动选择
+      - 香港地区
+      - 日本地区
+      - 新加坡地区
+      - 美国地区
+      - 英国地区
+      - 德国地区
+      - 台湾地区
+      - 韩国地区
+      - 荷兰地区
+      - 波兰地区
+      - 摩尔多瓦地区
+      - 芬兰地区
+      - 印度地区
+      - 泰国地区
+      - 法国地区
+      - 中国大陆地区
+
+  - name: 总模式
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/All.svg"
+    type: select
+    proxies:
+      - 默认代理
+      - 自动选择
+      - 手动选择
+      - 香港地区
+      - 日本地区
+      - 新加坡地区
+      - 美国地区
+      - 英国地区
+      - 德国地区
+      - 台湾地区
+      - 韩国地区
+      - 荷兰地区
+      - 波兰地区
+      - 摩尔多瓦地区
+      - 芬兰地区
+      - 印度地区
+      - 泰国地区
+      - 法国地区
+      - 中国大陆地区
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: GLOBAL
+    type: select
+    proxies:
+      - 默认代理
+      - 自动选择
+      - 手动选择
+      - 香港地区
+      - 日本地区
+      - 新加坡地区
+      - 美国地区
+      - 英国地区
+      - 德国地区
+      - 台湾地区
+      - 韩国地区
+      - 荷兰地区
+      - 波兰地区
+      - 摩尔多瓦地区
+      - 芬兰地区
+      - 印度地区
+      - 泰国地区
+      - 法国地区
+      - 中国大陆地区
+{{range .ActiveModules}}
+  {{if ne .Type "reject"}}
+      - {{.Name}}
+  {{end}}
+{{end}}
+{{range .CustomProxies}}
+      - {{.Name}}
+{{end}}
 
   - name: 订阅更新
     icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Update.svg"
@@ -243,6 +620,22 @@ rule-providers:
 
 # -------------------- 路由规则分发 --------------------
 rules:
+  # 与个人配置保持一致：优先阻断常见 STUN/WebRTC 端口与关键字。
+  - DST-PORT,3478,⛔️ 拒绝连接
+  - DST-PORT,5349,⛔️ 拒绝连接
+  - DST-PORT,19302,⛔️ 拒绝连接
+  - DST-PORT,19305,⛔️ 拒绝连接
+  - DST-PORT,19307,⛔️ 拒绝连接
+  - DST-PORT,19308,⛔️ 拒绝连接
+  - DOMAIN-KEYWORD,stun,⛔️ 拒绝连接
+
+  # 本地/私网保持直连。
+  - IP-CIDR,127.0.0.0/8,🇨🇳 大陆,no-resolve
+  - IP-CIDR,10.0.0.0/8,🇨🇳 大陆,no-resolve
+  - IP-CIDR,172.16.0.0/12,🇨🇳 大陆,no-resolve
+  - IP-CIDR,192.168.0.0/16,🇨🇳 大陆,no-resolve
+  - DOMAIN-SUFFIX,local,🇨🇳 大陆
+
   - RULE-SET,我的直连规则,🇨🇳 大陆
   - RULE-SET,WebRTC_端/域,⛔️ 拒绝连接
 {{range .ActiveModules}}
@@ -291,4 +684,4 @@ rules:
   - RULE-SET,CN_IP,🇨🇳 大陆
   - RULE-SET,Private_域,🇨🇳 大陆
   - RULE-SET,Private_IP,🇨🇳 大陆
-  - MATCH,漏网之鱼
+  - MATCH,默认代理
