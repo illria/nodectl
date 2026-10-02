@@ -4,12 +4,13 @@ on:
   push:
     branches:
       - feat/custom-routing-v4
+      - fix/dns-egress-v5
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.4
+  VERSION: v0.4.76-custom.5
   AGENT_VERSION: v0.2.77
 
 concurrency:

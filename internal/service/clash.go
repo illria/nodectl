@@ -124,7 +124,6 @@ type ClashTemplateData struct {
 	ActiveModules           []ClashModuleDef
 	GlobalDirectIcon        string
 	CustomProxies           []CustomProxyRule
-	NameserverPolicyRuleSet string // 用于存储动态生成的 DNS 策略字符串，例如 "CN_域,Apple_域"
 	ProxiesInterval         string
 	RulesInterval           string
 	PublicRulesInterval     string
@@ -143,27 +142,12 @@ func RenderClashConfig(relayURL, exitURL, baseURL, token string) (string, error)
 
 	var finalActiveMods []ClashModuleDef
 
-	// 初始化 dnsPolicyList，并包含基础规则 "CN_域"
-	dnsPolicyList := []string{"CN_域"}
-
 	for _, m := range allModules {
 		if activeMap[m.Name] {
 			finalActiveMods = append(finalActiveMods, m)
 
-			// 检查当前启用的模块是否是需要在 DNS 策略中特殊处理的模块
-			// 只有当用户勾选了 Apple，才将其加入 DNS 策略
-			if m.Name == "Apple" {
-				dnsPolicyList = append(dnsPolicyList, "Apple_域")
-			}
-			// 只有当用户勾选了 Microsoft，才将其加入 DNS 策略
-			if m.Name == "Microsoft" {
-				dnsPolicyList = append(dnsPolicyList, "Microsoft_域")
-			}
 		}
 	}
-
-	// 将切片用逗号连接成字符串，例如: "CN_域,Microsoft_域" 或 "CN_域"
-	dnsPolicyStr := strings.Join(dnsPolicyList, ",")
 
 	// 提前获取所有自定义分流组并且将图标转换为Clash支持的格式
 	allCustomProxies := GetCustomProxyRulesForClash()
@@ -211,7 +195,6 @@ func RenderClashConfig(relayURL, exitURL, baseURL, token string) (string, error)
 		Token:                   token,
 		GlobalDirectIcon:        getEmojiURL(GetCustomDirectIcon()),
 		CustomProxies:           validCustomProxies, // 替换为过滤后的有效分组
-		NameserverPolicyRuleSet: dnsPolicyStr,
 		ProxiesInterval:         proxiesInterval,
 		RulesInterval:           rulesInterval,
 		PublicRulesInterval:     publicRulesInterval,

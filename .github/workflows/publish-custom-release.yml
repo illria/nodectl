@@ -10,13 +10,13 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.4
+  VERSION: v0.4.76-custom.5
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.5' }}"
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.5' }}"
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +107,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.5' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,21 +135,18 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.4
-            - 重排 Clash 策略组：总模式、中转策略、手动选择、软件策略、地区与自动组、辅助组
-            - 删除默认代理和总自动选择，MATCH 直接进入总模式
-            - 新增中转关闭直连节点，落地机场通过中转策略统一控制 dialer-proxy
-            - 地区策略与对应自动组按国家成对排列
-            - 软件策略提前，并以总模式作为第一项
-            - 将加密货币图标替换为可加载的 Bitcoin SVG
-            - Mihomo 稳定版下载改用 Releases 重定向，不再依赖 GitHub API
-            - CloudflareST、cloudflared、NodeCTL 与 Agent 稳定版检查移除 GitHub API 依赖
-            - install.sh 稳定版安装与更新通过 Releases 重定向获取版本
-            - 新增默认开启的机场订阅自动同步，默认间隔 6 小时
-            - Agent 更新为 v0.2.77，启动检查按 Agent 产物版本判断升级
+            ### v0.4.76-custom.5
+            - 修复 DNS 出口与总模式不一致的问题：客户端普通 A/AAAA 查询统一通过总模式发送
+            - Fake-IP 网段从 172.20.0.1/16 改为 198.18.0.1/16，避免与 172.16.0.0/12 私网直连规则冲突
+            - 删除独立 DNS连接 策略组，避免历史选择导致 DNS 单独走香港/其他地区
+            - 删除 direct-nameserver 与 CN nameserver-policy 的普通查询分流，避免中国 DNS 泄漏
+            - proxy-server-nameserver 仅保留为代理节点域名 bootstrap，避免代理建立前产生递归解析
+            - DoT 853 端口改为跟随总模式
+            - 保留 custom.4 的总模式、中转策略、地区成对策略与机场 6 小时自动同步
+            - Agent 继续使用 v0.2.77
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.4`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.5`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -160,7 +157,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.4' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.5' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest
