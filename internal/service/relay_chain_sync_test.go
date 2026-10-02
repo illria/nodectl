@@ -27,6 +27,11 @@ func TestRelayChainWSSyncAuthoritativeOnEachConnection(t *testing.T) {
 	if err := db.Create(&disabled).Error; err != nil {
 		t.Fatal(err)
 	}
+	// GORM applies the model's default:true when Create receives a zero bool.
+	// Persist the disabled state explicitly, as the production delete path does.
+	if err := db.Model(&disabled).UpdateColumn("enabled", false).Error; err != nil {
+		t.Fatal(err)
+	}
 	var sets [][]relaychain.Config
 	relayChainDispatch = func(id, action string, payload interface{}, _ time.Duration) (*AgentCommandResult, error) {
 		if id != "relay000001" || action != "chain-sync" {
