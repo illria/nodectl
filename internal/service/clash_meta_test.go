@@ -124,7 +124,8 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	if chain := config.ProxyGroups[2]; chain.Type != "select" || len(chain.Use) != 1 || chain.Use[0] != "中转链" {
 		t.Fatalf("unexpected composite chain policy: %#v", chain)
 	}
-	if len(config.ProxyProviders) != 2 || len(config.ProxyProviders["落地机场"].Override) != 0 {
+	if len(config.ProxyProviders) != 2 || len(config.ProxyProviders["落地机场"].Override) != 1 ||
+		config.ProxyProviders["落地机场"].Override["udp"] != true {
 		t.Fatalf("unexpected providers: %#v", config.ProxyProviders)
 	}
 	if got := config.ProxyProviders["中转链"].URL; got != data.ChainSubURL {

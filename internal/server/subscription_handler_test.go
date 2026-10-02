@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"nodectl/internal/database"
@@ -106,7 +107,7 @@ func TestClashSubscriptionUsesCompositeAndDirectProviders(t *testing.T) {
 			Type string `yaml:"type"`
 		} `yaml:"proxies"`
 	}
-	if err := yaml.Unmarshal(chainRecorder.Body.Bytes(), &empty); err != nil || len(empty.Proxies) != 1 || empty.Proxies[0].Type != "direct" {
+	if err := yaml.Unmarshal(chainRecorder.Body.Bytes(), &empty); err != nil || len(empty.Proxies) != 1 || empty.Proxies[0].Type != "reject" {
 		t.Fatalf("chain fallback = %#v, parse error = %v", empty.Proxies, err)
 	}
 
@@ -146,5 +147,10 @@ func TestClashSubscriptionUsesCompositeAndDirectProviders(t *testing.T) {
 	}
 	if provider.Proxies[0].Port == chain.ExitListenPort || provider.Proxies[0].Password == chain.ExitPassword {
 		t.Fatal("hidden Exit inbound leaked into composite provider")
+	}
+	rawExit := httptest.NewRecorder()
+	apiSubRaw(rawExit, httptest.NewRequest(http.MethodGet, "https://panel.example/sub/raw/2?token=secret", nil))
+	if strings.Contains(rawExit.Body.String(), chain.ExitPassword) || strings.Contains(rawExit.Body.String(), "32000") {
+		t.Fatal("hidden Exit inbound leaked into ordinary landing provider")
 	}
 }

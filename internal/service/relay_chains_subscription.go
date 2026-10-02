@@ -32,7 +32,7 @@ func GenerateChainNodesYAML() (string, error) {
 		})
 	}
 	if len(proxies) == 0 {
-		proxies = append(proxies, &ClashNode{Name: "⚠️ 无中转链-自动直连", Type: "direct", UDP: true})
+		proxies = append(proxies, &ClashNode{Name: "⚠️ 无中转链-不可用", Type: "reject"})
 	}
 	var output bytes.Buffer
 	encoder := yaml.NewEncoder(&output)
