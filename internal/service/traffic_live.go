@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -438,26 +439,78 @@ func (h *TrafficHub) ensureNodeLiveState(installID string) {
 	}
 }
 
-// isSecureAgentWSRequest recognizes TLS and HTTPS termination at a reverse proxy.
-// The proxy must overwrite forwarded headers before forwarding Agent requests.
+// Forwarded protocol headers are trusted only from the immediate private or
+// loopback peer. The reverse proxy must overwrite them before forwarding.
+func isTrustedAgentReverseProxy(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4[0] == 10 ||
+			(ipv4[0] == 172 && ipv4[1] >= 16 && ipv4[1] <= 31) ||
+			(ipv4[0] == 192 && ipv4[1] == 168)
+	}
+	return ip[0]&0xfe == 0xfc // fc00::/7
+}
+
+func forwardedAgentProto(r *http.Request) (string, bool) {
+	// RFC 7239: the first element describes the client hop.
+	forwarded := strings.SplitN(r.Header.Get("Forwarded"), ",", 2)[0]
+	var proto string
+	for _, field := range strings.Split(forwarded, ";") {
+		key, value, ok := strings.Cut(field, "=")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "proto") {
+			if proto != "" {
+				return "", false
+			}
+			proto = strings.Trim(strings.TrimSpace(value), "\"")
+			if proto == "" {
+				return "", false
+			}
+		}
+	}
+	return proto, true
+}
+
+func isSecureAgentProto(proto string) bool {
+	return strings.EqualFold(proto, "https") || strings.EqualFold(proto, "wss")
+}
+
+// isSecureAgentWSRequest recognizes direct TLS or HTTPS termination at a
+// trusted immediate proxy. X-Forwarded-For is never used as a trust signal.
 func isSecureAgentWSRequest(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
-	if proto != "" {
-		return strings.EqualFold(proto, "https") || strings.EqualFold(proto, "wss")
+	if !isTrustedAgentReverseProxy(r) {
+		return false
 	}
-	// RFC 7239: use the first forwarded element, which describes the client hop.
-	forwarded := strings.SplitN(r.Header.Get("Forwarded"), ",", 2)[0]
-	for _, field := range strings.Split(forwarded, ";") {
-		key, value, ok := strings.Cut(field, "=")
-		if ok && strings.EqualFold(strings.TrimSpace(key), "proto") {
-			value = strings.Trim(strings.TrimSpace(value), "\"")
-			return strings.EqualFold(value, "https") || strings.EqualFold(value, "wss")
-		}
+	if len(r.Header.Values("X-Forwarded-Proto")) > 1 || len(r.Header.Values("Forwarded")) > 1 {
+		return false
 	}
-	return false
+	xfp := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	forwarded, valid := forwardedAgentProto(r)
+	if !valid {
+		return false
+	}
+	if xfp != "" && !isSecureAgentProto(xfp) {
+		return false
+	}
+	if forwarded != "" && !isSecureAgentProto(forwarded) {
+		return false
+	}
+	if xfp != "" && forwarded != "" && !strings.EqualFold(xfp, forwarded) {
+		return false
+	}
+	return xfp != "" || forwarded != ""
 }
 
 func (h *TrafficHub) registerAgentConnection(conn *websocket.Conn, installID string, secure bool) *websocket.Conn {
@@ -512,10 +565,9 @@ func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, client
 	h.ensureNodeLiveState(installID)
 	OnNodeConnectionStatusChanged(installID, true)
 	go func() {
-		if err := SyncRelayChainsToNode(installID); err != nil {
+		if err := restoreRelayChainsForNode(installID); err != nil {
 			logger.Log.Warn("同步 Agent 中转链集合失败", "install_id", installID)
 		}
-		ReconcileRelayChainsForNode(installID)
 	}()
 
 	nodeName := h.resolveNodeNameByInstallID(installID)

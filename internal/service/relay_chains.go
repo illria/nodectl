@@ -287,20 +287,26 @@ func AgentRelayChains(installID string) ([]relaychain.Config, error) {
 	return result, nil
 }
 
-// ReconcileRelayChainsForNode resumes pending work when an Agent reconnects.
+// ReconcileRelayChainsForNode revalidates every enabled chain touching a
+// reconnected Agent. A previously active chain must pass the Exit -> Relay
+// apply and Relay probe again before it remains in the subscription.
 func ReconcileRelayChainsForNode(installID string) {
 	relayChainMu.Lock()
 	defer relayChainMu.Unlock()
 	var chains []database.RelayChain
 	if err := database.DB.Where("(relay_install_id = ? OR exit_install_id = ?) AND status IN ?",
-		installID, installID, []string{ChainPending, ChainError, ChainPendingDelete}).Find(&chains).Error; err != nil {
+		installID, installID, []string{ChainActive, ChainPending, ChainError, ChainPendingDelete}).Find(&chains).Error; err != nil {
 		logger.Log.Error("读取待恢复中转链失败", "install_id", installID, "error", err)
 		return
 	}
 	for i := range chains {
 		if chains[i].Status == ChainPendingDelete {
 			deleteRelayChainLocked(&chains[i])
-		} else {
+		} else if chains[i].Enabled {
+			if chains[i].Status == ChainActive {
+				// Hide a stale entry while Exit apply and Relay probe run.
+				setRelayChainStatus(&chains[i], ChainPending, "等待重新验证 Agent 中转链")
+			}
 			applyRelayChainLocked(&chains[i])
 		}
 	}

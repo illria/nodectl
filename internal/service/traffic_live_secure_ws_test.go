@@ -12,25 +12,45 @@ import (
 
 func TestAgentWSSecurityRequestDetection(t *testing.T) {
 	for _, tc := range []struct {
-		name, forwardedProto, forwarded string
-		tls, want                       bool
+		name, remoteAddr, forwardedProto, forwarded string
+		tls, want                                   bool
 	}{
 		{name: "direct TLS", tls: true, want: true},
-		{name: "TLS overrides plain proxy header", tls: true, forwardedProto: "http", want: true},
-		{name: "proxy HTTPS", forwardedProto: "https", want: true},
-		{name: "proxy WSS", forwardedProto: "wss", want: true},
+		{name: "TLS overrides plain proxy header", remoteAddr: "198.51.100.10:9090", tls: true, forwardedProto: "http", want: true},
+		{name: "loopback HTTPS", remoteAddr: "127.0.0.1:7878", forwardedProto: "https", want: true},
+		{name: "Docker bridge HTTPS", remoteAddr: "172.17.0.2:7878", forwardedProto: "https", want: true},
+		{name: "private 172 range upper edge", remoteAddr: "172.31.255.254:7878", forwardedProto: "https", want: true},
+		{name: "private WSS", remoteAddr: "192.168.1.2:7878", forwardedProto: "wss", want: true},
+		{name: "private standard Forwarded HTTPS", remoteAddr: "10.0.0.2:7878", forwarded: "for=192.0.2.10;proto=https;host=panel.example", want: true},
+		{name: "IPv6 ULA proxy HTTPS", remoteAddr: "[fd00::2]:7878", forwardedProto: "https", want: true},
+		{name: "IPv6 loopback HTTPS", remoteAddr: "[::1]:7878", forwardedProto: "https", want: true},
 		{name: "proxy case insensitive", forwardedProto: " HTTPS ", want: true},
 		{name: "standard Forwarded HTTPS", forwarded: "for=192.0.2.10;proto=https;host=panel.example", want: true},
 		{name: "quoted Forwarded protocol", forwarded: "for=192.0.2.10; Proto=\"HTTPS\"", want: true},
+		{name: "public spoofed HTTPS", remoteAddr: "198.51.100.10:9090", forwardedProto: "https"},
+		{name: "public spoofed Forwarded", remoteAddr: "198.51.100.10:9090", forwarded: "proto=https"},
+		{name: "public spoofed WSS", remoteAddr: "198.51.100.10:9090", forwardedProto: "wss"},
+		{name: "outside private 172 range", remoteAddr: "172.32.0.1:9090", forwardedProto: "https"},
+		{name: "CGNAT is not trusted", remoteAddr: "100.64.0.1:9090", forwardedProto: "https"},
+		{name: "public IPv6 is not trusted", remoteAddr: "[2001:db8::2]:9090", forwardedProto: "https"},
+		{name: "unparseable peer", remoteAddr: "proxy.example:7878", forwardedProto: "https"},
+		{name: "missing peer port", remoteAddr: "172.17.0.2", forwardedProto: "https"},
 		{name: "plain WS"},
 		{name: "proxy HTTP", forwardedProto: "http"},
 		{name: "proxy WS", forwardedProto: "ws"},
 		{name: "ambiguous proxy protocols", forwardedProto: "http, https"},
 		{name: "conflicting forwarded headers", forwardedProto: "http", forwarded: "proto=https"},
+		{name: "conflicting secure forwarded headers", forwardedProto: "https", forwarded: "proto=wss"},
+		{name: "conflicting insecure forwarded headers", forwardedProto: "https", forwarded: "proto=http"},
+		{name: "duplicate Forwarded proto", forwarded: "proto=https;proto=http"},
 		{name: "standard Forwarded plain client hop", forwarded: "for=192.0.2.10;proto=http, for=192.0.2.20;proto=https"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("GET", "http://panel.example/api/callback/traffic/ws", nil)
+			r.RemoteAddr = "127.0.0.1:7878"
+			if tc.remoteAddr != "" {
+				r.RemoteAddr = tc.remoteAddr
+			}
 			if tc.tls {
 				r.TLS = &tls.ConnectionState{}
 			}
@@ -40,6 +60,20 @@ func TestAgentWSSecurityRequestDetection(t *testing.T) {
 				t.Fatalf("secure=%v, want %v", got, tc.want)
 			}
 		})
+	}
+	r := httptest.NewRequest("GET", "http://panel.example/api/callback/traffic/ws", nil)
+	r.RemoteAddr = "172.17.0.2:7878"
+	r.Header.Add("X-Forwarded-Proto", "https")
+	r.Header.Add("X-Forwarded-Proto", "http")
+	if isSecureAgentWSRequest(r) {
+		t.Fatal("multiple forwarded protocol headers were trusted")
+	}
+	public := httptest.NewRequest("GET", "http://panel.example/api/callback/traffic/ws", nil)
+	public.RemoteAddr = "198.51.100.10:9090"
+	public.Header.Set("X-Forwarded-For", "127.0.0.1")
+	public.Header.Set("X-Forwarded-Proto", "https")
+	if isSecureAgentWSRequest(public) {
+		t.Fatal("spoofed X-Forwarded-For made a public immediate peer trusted")
 	}
 }
 

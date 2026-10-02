@@ -137,3 +137,25 @@ func TestChainApplyProbeCommandStatuses(t *testing.T) {
 		}
 	}
 }
+
+func TestChainApplySameConfigProbesAgain(t *testing.T) {
+	rt, cm, _ := chainCommandTestRuntime(t)
+	oldDial := chainProbeDial
+	t.Cleanup(func() { chainProbeDial = oldDial })
+	probeCalls := 0
+	chainProbeDial = func(network, address string, timeout time.Duration) (net.Conn, error) {
+		probeCalls++
+		conn, peer := net.Pipe()
+		_ = peer.Close()
+		return conn, nil
+	}
+	chain := commandTestChain(relaychain.RoleRelay)
+	for range 2 {
+		if result := runChainTestCommand(t, rt, "chain-apply", chain); result.Status != "ok" {
+			t.Fatal("identical chain-apply did not acknowledge its probe")
+		}
+	}
+	if probeCalls != 2 || len(cm.Chains) != 1 || cm.Chains[0] != chain {
+		t.Fatalf("repeat apply skipped Relay probe or changed chain: probes=%d count=%d", probeCalls, len(cm.Chains))
+	}
+}
