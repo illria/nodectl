@@ -17,6 +17,7 @@ import (
 	"nodectl/internal/database"
 	"nodectl/internal/logger"
 	"nodectl/internal/relaychain"
+	"nodectl/internal/version"
 
 	"golang.org/x/mod/semver"
 	"gorm.io/gorm"
@@ -36,6 +37,7 @@ const (
 var (
 	relayChainMu       sync.Mutex
 	relayChainOnline   = IsNodeOnline
+	relayChainSecureWS = IsNodeSecureWS
 	relayChainDispatch = DispatchCommandToNode
 )
 
@@ -66,6 +68,11 @@ func CreateRelayChain(relayUUID, exitUUID string) (*database.RelayChain, error) 
 	}
 	if !relayChainAgentVersionSupported(relay.AgentVersion) || !relayChainAgentVersionSupported(exit.AgentVersion) {
 		return nil, fmt.Errorf("中转链要求 Relay 和 Exit Agent >= v0.2.78，请先升级 Agent")
+	}
+	for _, installID := range []string{relay.InstallID, exit.InstallID} {
+		if relayChainOnline(installID) && !relayChainSecureWS(installID) {
+			return nil, errRelayChainSecureWSRequired
+		}
 	}
 	relayIP := preferredNodeIP(relay)
 	exitIP := preferredNodeIP(exit)
@@ -173,6 +180,14 @@ func applyRelayChainLocked(chain *database.RelayChain) {
 	if chain.Status == ChainPendingDelete {
 		return
 	}
+	// Refuse the entire apply before constructing any secret payload when an
+	// online endpoint uses plaintext WS. Offline endpoints keep pending behavior.
+	for _, installID := range []string{chain.ExitInstallID, chain.RelayInstallID} {
+		if relayChainOnline(installID) && !relayChainSecureWS(installID) {
+			setRelayChainStatus(chain, ChainError, errRelayChainSecureWSRequired.Error())
+			return
+		}
+	}
 	if !relayChainOnline(chain.ExitInstallID) {
 		setRelayChainStatus(chain, ChainPending, "Exit Agent offline")
 		return
@@ -227,6 +242,9 @@ func setRelayChainStatus(chain *database.RelayChain, status, message string) {
 }
 
 func sendRelayChainCommand(installID, action string, payload interface{}) error {
+	if (action == "chain-sync" || action == "chain-apply") && (!relayChainOnline(installID) || !relayChainSecureWS(installID)) {
+		return errRelayChainSecureWSRequired
+	}
 	result, err := relayChainDispatch(installID, action, payload, 90*time.Second)
 	if err != nil {
 		return err
@@ -357,9 +375,14 @@ func ReconcileRelayChainNodeAddress(nodeUUID string) {
 	}
 }
 
-func relayChainAgentVersionSupported(version string) bool {
-	version = normalizeSemver(version)
-	return semver.IsValid(version) && semver.Compare(version, chainMinAgentVersion) >= 0
+func relayChainAgentVersionSupported(agentVersion string) bool {
+	agentVersion = normalizeSemver(agentVersion)
+	// Staging artifacts must be usable together while the production panel
+	// keeps its audited stable-version floor. No other prerelease is exempt.
+	if version.Version == "v0.4.76-custom.9-rc" && agentVersion == "v0.2.78-rc" {
+		return true
+	}
+	return semver.IsValid(agentVersion) && semver.Compare(agentVersion, chainMinAgentVersion) >= 0
 }
 
 func preferredNodeIP(node database.NodePool) string {

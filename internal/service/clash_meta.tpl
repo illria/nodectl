@@ -550,8 +550,8 @@ rules:
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - DOMAIN-SUFFIX,local,DIRECT
 
-  - RULE-SET,我的直连规则,DIRECT
-  - RULE-SET,WebRTC_端/域,REJECT
+  - RULE-SET,我的直连规则,DIRECT,no-resolve
+  - RULE-SET,WebRTC_端/域,REJECT,no-resolve
 
 {{range .ActiveModules}}
   {{if eq .Type "reject"}}
@@ -566,12 +566,12 @@ rules:
   - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
-  - RULE-SET,{{.Name}}_用户自定义,{{$target}}
+  - RULE-SET,{{.Name}}_用户自定义,{{$target}},no-resolve
   {{end}}
   {{end}}
 {{end}}
 {{range .CustomProxies}}
-  - RULE-SET,{{.Name}}_自定义分流,{{.Name}}
+  - RULE-SET,{{.Name}}_自定义分流,{{.Name}},no-resolve
 {{end}}
 
 {{range .ActiveModules}}
@@ -587,7 +587,7 @@ rules:
   - RULE-SET,{{.Name}}_IP,{{$target}},no-resolve
   {{end}}
   {{if .URL}}
-  - RULE-SET,{{.Name}}_用户自定义,{{$target}}
+  - RULE-SET,{{.Name}}_用户自定义,{{$target}},no-resolve
   {{end}}
   {{end}}
 {{end}}

@@ -20,6 +20,10 @@ type renderedClashConfig struct {
 		URL      string         `yaml:"url"`
 		Override map[string]any `yaml:"override"`
 	} `yaml:"proxy-providers"`
+	RuleProviders map[string]struct {
+		Behavior string `yaml:"behavior"`
+		Format   string `yaml:"format"`
+	} `yaml:"rule-providers"`
 	ProxyGroups []struct {
 		Name    string   `yaml:"name"`
 		Type    string   `yaml:"type"`
@@ -167,6 +171,86 @@ func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 		}
 	}
 
+}
+
+func TestRenderClashIPAndClassicalRuleSetsDoNotResolveDNS(t *testing.T) {
+	data := ClashTemplateData{
+		ChainSubURL: "https://panel.example/sub/chains?token=x",
+		ExitSubURL:  "https://panel.example/sub/raw/2?token=x",
+		BaseURL:     "https://panel.example",
+		Token:       "x",
+		ActiveModules: []ClashModuleDef{
+			{
+				Name: "Google", DomainURL: "https://example.test/google-domain.mrs",
+				IPURL: "https://example.test/google-ip.mrs", URL: "https://example.test/google-custom.list",
+			},
+			{Name: "Telegram", IPURL: "https://example.test/telegram-ip.mrs"},
+			{
+				Name: "阻断", Type: "reject", DomainURL: "https://example.test/reject-domain.mrs",
+				IPURL: "https://example.test/reject-ip.mrs", URL: "https://example.test/reject-custom.list",
+			},
+		},
+		CustomProxies:       []CustomProxyRule{{ID: "custom-proxy", Name: "自定义策略", Content: "IP-CIDR,198.51.100.0/24\nDOMAIN-SUFFIX,example.test"}},
+		ProxiesInterval:     "3600",
+		RulesInterval:       "300",
+		PublicRulesInterval: "86400",
+	}
+	tmpl, err := template.New("clash").Parse(ClashTemplateStr)
+	if err != nil {
+		t.Fatalf("parse template: %v", err)
+	}
+	var output bytes.Buffer
+	if err := tmpl.Execute(&output, data); err != nil {
+		t.Fatalf("render template: %v", err)
+	}
+	var config renderedClashConfig
+	if err := yaml.Unmarshal(output.Bytes(), &config); err != nil {
+		t.Fatalf("parse rendered YAML: %v", err)
+	}
+
+	referenced := make(map[string]bool, len(config.RuleProviders))
+	for _, rule := range config.Rules {
+		parts := strings.Split(rule, ",")
+		if parts[0] != "RULE-SET" {
+			continue
+		}
+		if len(parts) < 3 {
+			t.Fatalf("invalid RuleSet reference: %s", rule)
+		}
+		provider, ok := config.RuleProviders[parts[1]]
+		if !ok {
+			t.Fatalf("RuleSet references missing provider: %s", rule)
+		}
+		referenced[parts[1]] = true
+		switch provider.Behavior {
+		case "ipcidr", "classical":
+			if len(parts) != 4 || parts[3] != "no-resolve" {
+				t.Errorf("%s provider reference must use no-resolve: %s", provider.Behavior, rule)
+			}
+		case "domain":
+			if provider.Format == "mrs" && len(parts) != 3 {
+				t.Errorf("pure Domain MRS reference must stay unchanged: %s", rule)
+			}
+		}
+	}
+	for name, provider := range config.RuleProviders {
+		if !referenced[name] {
+			t.Errorf("%s provider %q has no rendered reference", provider.Behavior, name)
+		}
+	}
+	for _, name := range []string{
+		"我的直连规则", "WebRTC_端/域", "自定义策略_自定义分流", "Google_用户自定义", "阻断_用户自定义",
+		"Google_IP", "Telegram_IP", "阻断_IP", "Google_域", "阻断_域",
+	} {
+		if !referenced[name] {
+			t.Errorf("fixture did not exercise provider %q", name)
+		}
+	}
+	for _, forbidden := range []string{"dialer-proxy", "\ndns:", "\ntun:"} {
+		if strings.Contains(output.String(), forbidden) {
+			t.Errorf("generated subscription contains forbidden client override %q", forbidden)
+		}
+	}
 }
 
 func assertNoPolicyCycles(groups []struct {

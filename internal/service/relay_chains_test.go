@@ -32,12 +32,13 @@ func relayChainTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(&database.NodePool{}, &database.RelayChain{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
-	oldDB, oldLog, oldOnline, oldDispatch := database.DB, logger.Log, relayChainOnline, relayChainDispatch
+	oldDB, oldLog, oldOnline, oldDispatch, oldSecure := database.DB, logger.Log, relayChainOnline, relayChainDispatch, relayChainSecureWS
 	database.DB = db
+	relayChainSecureWS = func(string) bool { return true }
 	logger.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	t.Cleanup(func() {
 		database.DB, logger.Log = oldDB, oldLog
-		relayChainOnline, relayChainDispatch = oldOnline, oldDispatch
+		relayChainOnline, relayChainDispatch, relayChainSecureWS = oldOnline, oldDispatch, oldSecure
 	})
 	return db
 }

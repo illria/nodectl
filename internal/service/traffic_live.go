@@ -175,8 +175,9 @@ type TrafficHub struct {
 	subMu       sync.Mutex
 
 	// Agent 活跃连接：install_id → websocket.Conn（用于命令下发）
-	agentConns map[string]*websocket.Conn
-	agentMu    sync.RWMutex
+	agentConns    map[string]*websocket.Conn
+	agentSecureWS map[string]bool // 与当前 agentConns 连接共同注册和清理
+	agentMu       sync.RWMutex
 
 	// 命令结果回调通道：command_id → channel
 	cmdResults map[string]chan AgentCommandResult
@@ -195,12 +196,13 @@ var hubOnce sync.Once
 func GetTrafficHub() *TrafficHub {
 	hubOnce.Do(func() {
 		globalHub = &TrafficHub{
-			nodes:       make(map[string]*NodeLiveState),
-			idCache:     make(map[string]string),
-			subscribers: make(map[string]map[chan FrontendPushMsg]struct{}),
-			agentConns:  make(map[string]*websocket.Conn),
-			cmdResults:  make(map[string]chan AgentCommandResult),
-			cmdLogs:     make(map[string]*CommandLog),
+			nodes:         make(map[string]*NodeLiveState),
+			idCache:       make(map[string]string),
+			subscribers:   make(map[string]map[chan FrontendPushMsg]struct{}),
+			agentConns:    make(map[string]*websocket.Conn),
+			agentSecureWS: make(map[string]bool),
+			cmdResults:    make(map[string]chan AgentCommandResult),
+			cmdLogs:       make(map[string]*CommandLog),
 		}
 		go globalHub.runTotalPersistLoop()
 		go globalHub.runPointPersistLoop()
@@ -436,7 +438,44 @@ func (h *TrafficHub) ensureNodeLiveState(installID string) {
 	}
 }
 
-func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, clientIP string, agentInstallID *string) bool {
+// isSecureAgentWSRequest recognizes TLS and HTTPS termination at a reverse proxy.
+// The proxy must overwrite forwarded headers before forwarding Agent requests.
+func isSecureAgentWSRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto != "" {
+		return strings.EqualFold(proto, "https") || strings.EqualFold(proto, "wss")
+	}
+	// RFC 7239: use the first forwarded element, which describes the client hop.
+	forwarded := strings.SplitN(r.Header.Get("Forwarded"), ",", 2)[0]
+	for _, field := range strings.Split(forwarded, ";") {
+		key, value, ok := strings.Cut(field, "=")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "proto") {
+			value = strings.Trim(strings.TrimSpace(value), "\"")
+			return strings.EqualFold(value, "https") || strings.EqualFold(value, "wss")
+		}
+	}
+	return false
+}
+
+func (h *TrafficHub) registerAgentConnection(conn *websocket.Conn, installID string, secure bool) *websocket.Conn {
+	h.agentMu.Lock()
+	defer h.agentMu.Unlock()
+	if h.agentConns == nil {
+		h.agentConns = make(map[string]*websocket.Conn)
+	}
+	if h.agentSecureWS == nil {
+		h.agentSecureWS = make(map[string]bool)
+	}
+	prevConn := h.agentConns[installID]
+	h.agentConns[installID] = conn
+	h.agentSecureWS[installID] = secure
+	return prevConn
+}
+
+func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, clientIP string, agentInstallID *string, secure bool) bool {
 	installID = strings.TrimSpace(installID)
 	if installID == "" {
 		return false
@@ -464,10 +503,7 @@ func (h *TrafficHub) bindAgentConnection(conn *websocket.Conn, installID, client
 	}
 
 	*agentInstallID = installID
-	h.agentMu.Lock()
-	prevConn := h.agentConns[installID]
-	h.agentConns[installID] = conn
-	h.agentMu.Unlock()
+	prevConn := h.registerAgentConnection(conn, installID, secure)
 
 	// 如果同一节点已有旧连接，主动关闭旧连接，避免并发双连接导致状态抖动。
 	if prevConn != nil && prevConn != conn {
@@ -513,6 +549,7 @@ func (h *TrafficHub) unbindAgentConnectionIfCurrent(conn *websocket.Conn, instal
 	}
 
 	delete(h.agentConns, installID)
+	delete(h.agentSecureWS, installID)
 	return true
 }
 
@@ -526,6 +563,7 @@ func (h *TrafficHub) unbindAgentConnectionIfCurrent(conn *websocket.Conn, instal
 func HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 	hub := GetTrafficHub()
 	clientIP := getClientIP(r)
+	secure := isSecureAgentWSRequest(r)
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		Subprotocols:   []string{"nodectl-agent"},
@@ -544,6 +582,14 @@ func HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 
 	// 首个消息用于识别 install_id 并注册连接
 	var agentInstallID string
+	// Every exit path must remove this connection, including rejected rebinding.
+	// The read-error path may already have removed it; current-connection checks
+	// prevent duplicate offline notifications or clearing a newer connection.
+	defer func() {
+		if hub.unbindAgentConnectionIfCurrent(conn, agentInstallID) {
+			OnNodeConnectionStatusChanged(agentInstallID, false)
+		}
+	}()
 
 	for {
 		readCtx, readCancel := context.WithTimeout(ctx, agentReadTimeout)
@@ -614,7 +660,7 @@ func HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 
 		// 🆕 处理新增的消息类型（node_online / links_update）
 		if peek.Type == "node_online" || peek.Type == "links_update" || peek.Type == "protocol_change" {
-			hub.handleNewMessageType(data, peek.Type, clientIP, &agentInstallID, conn)
+			hub.handleNewMessageType(data, peek.Type, clientIP, &agentInstallID, conn, secure)
 			continue
 		}
 
@@ -631,7 +677,7 @@ func HandleAgentWS(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 硬核校验：如果内存名单里根本没有这个节点（被删的孤儿），直接挂断不接客，并且不刷屏
-		if !hub.bindAgentConnection(conn, installID, clientIP, &agentInstallID) {
+		if !hub.bindAgentConnection(conn, installID, clientIP, &agentInstallID, secure) {
 			return
 		}
 
@@ -1059,15 +1105,10 @@ func ResetNodeTrafficLiveState(installID string, nodeUUID string, resetAt time.T
 }
 
 func DispatchCommandToNode(installID string, action string, payload interface{}, timeout time.Duration) (*AgentCommandResult, error) {
-	hub := GetTrafficHub()
+	return GetTrafficHub().dispatchCommandToNode(installID, action, payload, timeout)
+}
 
-	// 检查 Agent 是否在线
-	hub.agentMu.RLock()
-	conn, online := hub.agentConns[installID]
-	hub.agentMu.RUnlock()
-	if !online || conn == nil {
-		return nil, fmt.Errorf("节点 %s 不在线", installID)
-	}
+func (hub *TrafficHub) dispatchCommandToNode(installID string, action string, payload interface{}, timeout time.Duration) (*AgentCommandResult, error) {
 
 	// 生成唯一命令 ID
 	commandID := fmt.Sprintf("cmd-%s-%d", installID, time.Now().UnixNano())
@@ -1079,29 +1120,28 @@ func DispatchCommandToNode(installID string, action string, payload interface{},
 		Payload:   payload,
 	}
 
-	// 注册结果通道
 	resultCh := make(chan AgentCommandResult, 8)
-	hub.cmdMu.Lock()
-	hub.cmdResults[commandID] = resultCh
-	hub.cmdMu.Unlock()
-
-	// 清理函数
 	defer func() {
 		hub.cmdMu.Lock()
 		delete(hub.cmdResults, commandID)
 		hub.cmdMu.Unlock()
 	}()
-
-	// 发送命令到 Agent
-	data, err := json.Marshal(cmd)
-	if err != nil {
-		return nil, fmt.Errorf("命令序列化失败: %w", err)
-	}
-
-	writeCtx, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer writeCancel()
-	if err := conn.Write(writeCtx, websocket.MessageText, data); err != nil {
-		return nil, fmt.Errorf("命令发送失败: %w", err)
+	if err := hub.withAgentCommandConnection(installID, action, func(conn *websocket.Conn) error {
+		data, err := json.Marshal(cmd)
+		if err != nil {
+			return fmt.Errorf("命令序列化失败: %w", err)
+		}
+		hub.cmdMu.Lock()
+		hub.cmdResults[commandID] = resultCh
+		hub.cmdMu.Unlock()
+		writeCtx, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer writeCancel()
+		if err := conn.Write(writeCtx, websocket.MessageText, data); err != nil {
+			return fmt.Errorf("命令发送失败: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	logger.Log.Info("命令已下发", "install_id", installID, "action", action, "command_id", commandID)
@@ -1124,13 +1164,45 @@ func DispatchCommandToNode(installID string, action string, payload interface{},
 	}
 }
 
+var errRelayChainSecureWSRequired = errors.New("Agent secure WebSocket (WSS) required for relay chain")
+
+func isRelayChainSecretAction(action string) bool {
+	return action == "chain-apply" || action == "chain-sync"
+}
+
+// Hold the connection lock through serialization and write. A replacement cannot
+// pair a new socket with the previous connection's secure status during dispatch.
+func (h *TrafficHub) withAgentCommandConnection(installID, action string, send func(*websocket.Conn) error) error {
+	h.agentMu.RLock()
+	defer h.agentMu.RUnlock()
+	conn, online := h.agentConns[installID]
+	if isRelayChainSecretAction(action) && (!online || conn == nil || !h.agentSecureWS[installID]) {
+		return errRelayChainSecureWSRequired
+	}
+	if !online || conn == nil {
+		return fmt.Errorf("节点 %s 不在线", installID)
+	}
+	return send(conn)
+}
+
+// IsNodeSecureWS reports whether the current active Agent connection uses WSS.
+func IsNodeSecureWS(installID string) bool {
+	return GetTrafficHub().isNodeSecureWS(installID)
+}
+
+func (h *TrafficHub) isNodeSecureWS(installID string) bool {
+	h.agentMu.RLock()
+	defer h.agentMu.RUnlock()
+	return h.agentConns[installID] != nil && h.agentSecureWS[installID]
+}
+
 // IsNodeOnline 检查节点是否有活跃 Agent 连接
 func IsNodeOnline(installID string) bool {
 	hub := GetTrafficHub()
 	hub.agentMu.RLock()
 	defer hub.agentMu.RUnlock()
-	_, ok := hub.agentConns[installID]
-	return ok
+	conn, ok := hub.agentConns[installID]
+	return ok && conn != nil
 }
 
 func HasRecentNodeTrafficSignal(installID string) bool {
@@ -1165,13 +1237,15 @@ func CleanupNodeState(installID string, nodeUUID string) {
 	delete(hub.idCache, installID)
 	hub.mu.Unlock()
 
-	// 关闭并清理 Agent WS 连接
+	// 连接和安全状态同时清理；关闭在锁外完成，避免阻塞其他节点命令。
 	hub.agentMu.Lock()
-	if conn, ok := hub.agentConns[installID]; ok && conn != nil {
-		conn.Close(websocket.StatusGoingAway, "节点已删除")
-		delete(hub.agentConns, installID)
-	}
+	conn := hub.agentConns[installID]
+	delete(hub.agentConns, installID)
+	delete(hub.agentSecureWS, installID)
 	hub.agentMu.Unlock()
+	if conn != nil {
+		_ = conn.Close(websocket.StatusGoingAway, "节点已删除")
+	}
 
 	// 关闭该节点的所有前端订阅者
 	hub.subMu.Lock()
@@ -1192,14 +1266,10 @@ func CleanupNodeState(installID string, nodeUUID string) {
 
 // FireCommandToNode 异步下发命令，立即返回 commandID（不等待结果）
 func FireCommandToNode(installID string, action string, payload interface{}) (string, error) {
-	hub := GetTrafficHub()
+	return GetTrafficHub().fireCommandToNode(installID, action, payload)
+}
 
-	hub.agentMu.RLock()
-	conn, online := hub.agentConns[installID]
-	hub.agentMu.RUnlock()
-	if !online || conn == nil {
-		return "", fmt.Errorf("节点 %s 不在线", installID)
-	}
+func (hub *TrafficHub) fireCommandToNode(installID string, action string, payload interface{}) (string, error) {
 
 	commandID := fmt.Sprintf("cmd-%s-%d", installID, time.Now().UnixNano())
 
@@ -1210,23 +1280,29 @@ func FireCommandToNode(installID string, action string, payload interface{}) (st
 		Payload:   payload,
 	}
 
-	// 预创建命令日志（SSE 订阅者可能在命令结果到来之前就连接）
-	hub.logMu.Lock()
-	hub.cmdLogs[commandID] = &CommandLog{
-		entries: make([]CommandLogEntry, 0, 64),
-		subs:    make(map[chan CommandLogEntry]struct{}),
-	}
-	hub.logMu.Unlock()
-
-	data, err := json.Marshal(cmd)
-	if err != nil {
-		return "", fmt.Errorf("命令序列化失败: %w", err)
-	}
-
-	writeCtx, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer writeCancel()
-	if err := conn.Write(writeCtx, websocket.MessageText, data); err != nil {
-		return "", fmt.Errorf("命令发送失败: %w", err)
+	if err := hub.withAgentCommandConnection(installID, action, func(conn *websocket.Conn) error {
+		data, err := json.Marshal(cmd)
+		if err != nil {
+			return fmt.Errorf("命令序列化失败: %w", err)
+		}
+		// 通过安全检查后才预创建命令日志。
+		hub.logMu.Lock()
+		hub.cmdLogs[commandID] = &CommandLog{
+			entries: make([]CommandLogEntry, 0, 64),
+			subs:    make(map[chan CommandLogEntry]struct{}),
+		}
+		hub.logMu.Unlock()
+		writeCtx, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer writeCancel()
+		if err := conn.Write(writeCtx, websocket.MessageText, data); err != nil {
+			hub.logMu.Lock()
+			delete(hub.cmdLogs, commandID)
+			hub.logMu.Unlock()
+			return fmt.Errorf("命令发送失败: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return "", err
 	}
 
 	nodeName := hub.resolveNodeNameByInstallID(installID)
@@ -1349,7 +1425,7 @@ type wsLinksUpdatePayload struct {
 }
 
 // handleNewMessageType 🆕 处理新增的 WebSocket 消息类型
-func (h *TrafficHub) handleNewMessageType(data []byte, msgType string, clientIP string, agentInstallID *string, conn *websocket.Conn) {
+func (h *TrafficHub) handleNewMessageType(data []byte, msgType string, clientIP string, agentInstallID *string, conn *websocket.Conn, secure bool) {
 	var msg wsMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		logger.Log.Warn("WS 新消息解析失败", "error", err, "type", msgType, "ip", clientIP)
@@ -1362,7 +1438,7 @@ func (h *TrafficHub) handleNewMessageType(data []byte, msgType string, clientIP 
 		return
 	}
 
-	if !h.bindAgentConnection(conn, installID, clientIP, agentInstallID) {
+	if !h.bindAgentConnection(conn, installID, clientIP, agentInstallID, secure) {
 		return
 	}
 

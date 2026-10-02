@@ -12,6 +12,7 @@ import (
 
 func TestRelayChainWSSyncAuthoritativeOnEachConnection(t *testing.T) {
 	db := relayChainTestDB(t)
+	relayChainOnline = func(string) bool { return true }
 	for i, status := range []string{ChainActive, ChainPending, ChainError, ChainPendingDelete} {
 		chain := database.RelayChain{
 			ID:             []string{"chain-0000000000000001", "chain-0000000000000002", "chain-0000000000000003", "chain-0000000000000004"}[i],
@@ -68,6 +69,7 @@ func TestRelayChainWSSyncAuthoritativeOnEachConnection(t *testing.T) {
 
 func TestRelayChainWSSyncReportsDispatchFailure(t *testing.T) {
 	db := relayChainTestDB(t)
+	relayChainOnline = func(string) bool { return true }
 	active := database.RelayChain{ID: "chain-0000000000000001", RelayInstallID: "relay000001", ExitInstallID: "exit0000001", Enabled: true, Status: ChainActive}
 	deleting := database.RelayChain{ID: "chain-0000000000000002", RelayInstallID: "relay000001", ExitInstallID: "exit0000001", Enabled: false, Status: ChainPendingDelete}
 	if err := db.Create(&active).Error; err != nil {

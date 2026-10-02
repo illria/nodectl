@@ -10,6 +10,11 @@ func SyncRelayChainsToNode(installID string) error {
 	relayChainMu.Lock()
 	defer relayChainMu.Unlock()
 
+	// Check before loading the private set. The dispatcher checks the current
+	// connection again while holding agentMu through the write.
+	if !relayChainOnline(installID) || !relayChainSecureWS(installID) {
+		return errRelayChainSecureWSRequired
+	}
 	chains, err := AgentRelayChains(installID)
 	if err != nil {
 		return err

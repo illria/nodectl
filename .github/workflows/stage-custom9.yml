@@ -1,0 +1,200 @@
+name: Stage Custom.9
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSION: v0.4.76-custom.9-rc
+  AGENT_VERSION: v0.2.78-rc
+  STAGING_IMAGE: ghcr.io/illria/nodectl:custom9-rc
+
+concurrency:
+  group: stage-custom9
+  cancel-in-progress: false
+
+jobs:
+  validate-branch:
+    name: Validate staging branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require custom.9 feature branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/feat/server-side-relay-v9" ]; then
+            echo "::error::Staging is only allowed on feat/server-side-relay-v9"
+            exit 1
+          fi
+
+      - name: Staging summary
+        run: |
+          {
+            echo "## Custom.9 staging"
+            echo ""
+            echo "- HEAD SHA: ${GITHUB_SHA}"
+            echo "- Panel version: ${VERSION}"
+            echo "- Agent version: ${AGENT_VERSION}"
+            echo "- Docker staging tag: ${STAGING_IMAGE}"
+            echo "- Artifact retention: 1 day"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build-panel:
+    name: Stage Panel linux ${{ matrix.goarch }}
+    needs: validate-branch
+    if: github.ref == 'refs/heads/feat/server-side-relay-v9'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout exact staging HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build panel
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p bin
+          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=${VERSION}'" \
+            -o "bin/nodectl-linux-${GOARCH}" ./main.go
+
+      - name: Upload panel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodectl-linux-${{ matrix.goarch }}
+          path: bin/nodectl-linux-${{ matrix.goarch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  build-agent:
+    name: Stage Agent linux ${{ matrix.goarch }}
+    needs: validate-branch
+    if: github.ref == 'refs/heads/feat/server-side-relay-v9'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout exact staging HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build agent
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p bin
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          GIT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-8)
+          OUT="bin/nodectl-agent-linux-${GOARCH}-${AGENT_VERSION}"
+          go build -trimpath -ldflags="-s -w \
+            -X 'nodectl/internal/agent.AgentVersion=${AGENT_VERSION}' \
+            -X 'nodectl/internal/agent.UpdateRepoOwner=illria' \
+            -X 'nodectl/internal/agent.UpdateRepoName=nodectl' \
+            -X 'nodectl/internal/agent.GitCommit=${GIT_SHA}' \
+            -X 'nodectl/internal/agent.BuildTime=${BUILD_TIME}'" \
+            -o "${OUT}" ./cmd/nodectl-agent/main.go
+
+      - name: Upload agent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodectl-agent-linux-${{ matrix.goarch }}-${{ env.AGENT_VERSION }}
+          path: bin/nodectl-agent-linux-${{ matrix.goarch }}-${{ env.AGENT_VERSION }}
+          if-no-files-found: error
+          retention-days: 1
+
+  stage-image:
+    name: Build and push custom9-rc Docker
+    needs: [validate-branch, build-panel, build-agent]
+    if: github.ref == 'refs/heads/feat/server-side-relay-v9'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout exact staging HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download Linux panel binaries from this run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nodectl-linux-*
+          path: bin
+          merge-multiple: true
+
+      - name: Make binaries executable
+        run: chmod +x bin/nodectl-linux-amd64 bin/nodectl-linux-arm64
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push staging tag only
+        id: staging-image
+        uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
+        with:
+          context: .
+          file: .github/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.STAGING_IMAGE }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Docker staging summary
+        env:
+          IMAGE_DIGEST: ${{ steps.staging-image.outputs.digest }}
+        run: |
+          {
+            echo "## Staging image pushed"
+            echo ""
+            echo "- HEAD SHA: ${GITHUB_SHA}"
+            echo "- Panel version: ${VERSION}"
+            echo "- Agent version: ${AGENT_VERSION}"
+            echo "- Docker staging tag: ${STAGING_IMAGE}"
+            echo "- Docker digest: ${IMAGE_DIGEST}"
+          } >> "${GITHUB_STEP_SUMMARY}"
