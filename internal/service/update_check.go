@@ -35,8 +35,8 @@ var (
 )
 
 const (
-	githubReleasesLatestAPI = "https://api.github.com/repos/hobin66/nodectl/releases/latest"
-	githubReleasesListAPI   = "https://api.github.com/repos/hobin66/nodectl/releases"
+	githubReleasesLatestAPI = "https://api.github.com/repos/illria/nodectl/releases/latest"
+	githubReleasesListAPI   = "https://api.github.com/repos/illria/nodectl/releases"
 )
 
 // CheckForUpdate 检查是否有新版本可用，带内存缓存

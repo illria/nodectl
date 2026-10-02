@@ -10,13 +10,60 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.1
+  VERSION: v0.4.76-custom.2
+  AGENT_VERSION: v0.2.76
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
-  build-binaries:
-    if: "${{ github.event.head_commit.message == 'fix: publish v0.4.76-custom.1' }}"
-    name: Build ${{ matrix.goarch }}
+  build-panel:
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build panel
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p bin
+          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=${VERSION}'" \
+            -o "bin/nodectl-${GOOS}-${GOARCH}${{ matrix.ext }}" ./main.go
+
+      - name: Upload panel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/nodectl-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          retention-days: 1
+
+  build-agent:
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,39 +78,51 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build NodeCTL
+      - name: Build agent
         env:
           CGO_ENABLED: "0"
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=${VERSION}'" \
-            -o "bin/nodectl-linux-${GOARCH}" ./main.go
-          sha256sum "bin/nodectl-linux-${GOARCH}" > "bin/nodectl-linux-${GOARCH}.sha256"
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          GIT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-8)
+          OUT="bin/nodectl-agent-linux-${GOARCH}-${AGENT_VERSION}"
+          go build -trimpath -ldflags="-s -w \
+            -X 'nodectl/internal/agent.AgentVersion=${AGENT_VERSION}' \
+            -X 'nodectl/internal/agent.UpdateRepoOwner=illria' \
+            -X 'nodectl/internal/agent.UpdateRepoName=nodectl' \
+            -X 'nodectl/internal/agent.GitCommit=${GIT_SHA}' \
+            -X 'nodectl/internal/agent.BuildTime=${BUILD_TIME}'" \
+            -o "${OUT}" ./cmd/nodectl-agent/main.go
+          sha256sum "${OUT}" > "${OUT}.sha256"
 
-      - name: Upload binary artifact
+      - name: Upload agent artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-linux-${{ matrix.goarch }}
+          name: agent-${{ matrix.goarch }}
           path: |
-            bin/nodectl-linux-${{ matrix.goarch }}
-            bin/nodectl-linux-${{ matrix.goarch }}.sha256
+            bin/nodectl-agent-linux-${{ matrix.goarch }}-${{ env.AGENT_VERSION }}
+            bin/nodectl-agent-linux-${{ matrix.goarch }}-${{ env.AGENT_VERSION }}.sha256
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'fix: publish v0.4.76-custom.1' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
     name: Publish GitHub Release
-    needs: build-binaries
+    needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download binaries
+      - name: Download panel binaries
         uses: actions/download-artifact@v4
         with:
-          pattern: release-linux-*
+          pattern: panel-*
+          path: bin
+          merge-multiple: true
+
+      - name: Download agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
           path: bin
           merge-multiple: true
 
@@ -74,46 +133,41 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: NodeCTL Custom ${{ env.VERSION }}
           body: |
-            基于上游 NodeCTL v0.4.76 的个人定制版本。
+            illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### 本版本新增
-            - 地区自动选择与地区手动选择：香港、日本、新加坡、美国、英国、德国、台湾、韩国、荷兰、波兰、摩尔多瓦、芬兰、印度、泰国、法国、中国大陆
-            - 保留 NodeCTL 中转/落地机场模型，地区筛选仅作用于落地节点
-            - 新增 默认代理 / GLOBAL 组合策略
-            - 新增加密货币分流模块
-            - 加入 STUN / WebRTC 常见端口与关键字阻断
-            - 本地/私网流量保持直连
-            - 未匹配流量最终进入 默认代理
-            - 与 NodeCTL 原有 OpenAI、Telegram、YouTube、Twitter(X)、TikTok 等模块兼容
+            ### v0.4.76-custom.2
+            - README 全面切换到 illria/nodectl 的安装、Release 与 GHCR 地址
+            - install.sh 改为从 illria/nodectl Releases 获取面板二进制
+            - 面板版本检查改为检查 illria/nodectl Releases
+            - Agent 自更新仓库改为 illria/nodectl
+            - Release 补齐 Linux / Windows 面板二进制
+            - Release 补齐 Linux amd64 / arm64 Agent 与 SHA256
+            - 保留 custom.1 的地区自动选择、地区策略组、业务分流与加密货币模块
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.1`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.2`
 
-            同时继续提供：
+            也提供：
             - `ghcr.io/illria/nodectl:latest`
             - `ghcr.io/illria/nodectl:custom`
-          files: |
-            bin/nodectl-linux-amd64
-            bin/nodectl-linux-amd64.sha256
-            bin/nodectl-linux-arm64
-            bin/nodectl-linux-arm64.sha256
+          files: bin/*
           draft: false
           prerelease: false
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'fix: publish v0.4.76-custom.1' }}"
-    name: Publish Versioned Docker Image
-    needs: build-binaries
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.2' }}"
+    name: Publish Docker Image
+    needs: build-panel
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download binaries
+      - name: Download Linux panel binaries
         uses: actions/download-artifact@v4
         with:
-          pattern: release-linux-*
+          pattern: panel-linux-*
           path: bin
           merge-multiple: true
 
@@ -133,7 +187,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push versioned image
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -142,6 +196,8 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:custom
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ env.VERSION }}
