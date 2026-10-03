@@ -150,7 +150,7 @@ func TestSingBoxRuleConversion(t *testing.T) {
 	if rule["domain_suffix"].([]string)[0] != ".example.com" || rule["domain"].([]string)[0] != "example.com" {
 		t.Fatal("domain suffix semantics differ on old cores")
 	}
-	for _, ip := range []string{"127.0.0.1", "10.0.0.1", "::1", "::ffff:127.0.0.1", "169.254.169.254", "fc00::1", "0.0.0.0"} {
+	for _, ip := range []string{"127.0.0.1", "10.0.0.1", "::1", "::ffff:127.0.0.1", "169.254.169.254", "100.100.100.200", "198.18.0.1", "fc00::1", "0.0.0.0"} {
 		if publicRuleAddress(netip.MustParseAddr(ip)) {
 			t.Fatal("SSRF accepted", ip)
 		}

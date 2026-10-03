@@ -181,6 +181,11 @@ var singBoxRuleCache = struct {
 
 func publicRuleAddress(addr netip.Addr) bool {
 	addr = addr.Unmap()
+	for _, prefix := range []string{"100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32"} {
+		if netip.MustParsePrefix(prefix).Contains(addr) {
+			return false
+		}
+	}
 	return addr.IsValid() && !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() && !addr.IsLinkLocalMulticast() && !addr.IsMulticast() && !addr.IsUnspecified() && addr.IsGlobalUnicast()
 }
 
