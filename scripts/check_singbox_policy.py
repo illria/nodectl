@@ -182,11 +182,17 @@ try:
         config['inbounds'] = [{'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}]
         config['log'] = {'level': 'debug'}
         config['route']['auto_detect_interface'] = False
+        (root / 'empty-domain.json').write_text('{"version":1,"rules":[{"domain":["unused-fixture.invalid"]}]}')
+        domestic_dns_sets = {tag for rule in config['dns']['rules'] if rule.get('server') == 'dns-bootstrap' for tag in rule.get('rule_set', [])}
         for rule_set in config['route']['rule_set']:
             name = 'cn.srs' if rule_set['tag'] == 'CN_域' else 'domestic-module.srs' if rule_set['tag'] == 'BiliBili_域' else 'rules.srs'
             tag = rule_set['tag']
             rule_set.clear()
             rule_set.update(type='local', tag=tag, format='binary', path=str((fixture.parent / name).resolve()))
+            if tag in domestic_dns_sets and tag not in ['CN_域', 'BiliBili_域']:
+                # Domain providers must not use the generic IP/port fixture:
+                # those conditions cause response-filter DNS lookups on 1.9+.
+                rule_set.update(format='source', path=str(root / 'empty-domain.json'))
         for outbound in config['outbounds']:
             if outbound['tag'] == '总模式':
                 outbound.update(outbounds=['policy-proxy'], default='policy-proxy')
@@ -207,7 +213,10 @@ try:
                 server.update(type='tcp', server='127.0.0.1', server_port=mock.server_address[1])
             else:
                 server['address'] = f'tcp://127.0.0.1:{mock.server_address[1]}'
-            server['detour'] = '总模式' if tag == 'dns-remote' else '中转关闭'
+            if tag == 'dns-remote':
+                server['detour'] = '总模式'
+            elif minor < 12:
+                server['detour'] = '中转关闭'
         config['experimental'] = {'clash_api': {'external_controller': f'127.0.0.1:{controller}', 'default_mode': 'Rule'}}
         profile = root / 'profile.json'
         profile.write_text(json.dumps(config))
