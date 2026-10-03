@@ -1,0 +1,1476 @@
+# User-verified reference; panel URLs and subscription token replaced with test values.
+proxy-providers:
+  中转机场:
+    type: http
+    interval: 3600
+    url: "https://panel.example/sub/raw/1?token=reference-test-token"
+    path: ./proxy_providers/clash-node.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    override:
+      udp: true
+  落地机场:
+    type: http
+    interval: 3600
+    url: "https://panel.example/sub/raw/2?token=reference-test-token"
+    path: ./proxy_providers/exit.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    override:
+      udp: true
+      dialer-proxy: '💠 中转策略'
+      skip-proxy: false
+
+proxies:
+    - {name: 🇨🇳 大陆, type: direct, udp: true}
+    - {name: ⛔️ 拒绝连接, type: reject}
+    - {name: 中转关闭, type: direct, udp: true}
+
+# -------------------- 软件策略通用选项 --------------------
+# 软件模块可以选择总模式、手动/地区策略或直连/拒绝，不引用自身或 GLOBAL。
+
+# -------------------- 策略组自动生成 --------------------
+# 客户端策略组顺序：总模式、中转、手动、软件模块、地区/自动成对、辅助组。
+proxy-groups:
+  - name: 总模式
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/All.svg"
+    type: select
+    proxies:
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+    use:
+      - 落地机场
+
+  - name: '💠 中转策略'
+    type: select
+    proxies:
+      - 中转关闭
+    use:
+      - 中转机场
+
+  - name: 手动选择
+    type: select
+    use:
+      - 落地机场
+
+  - name: 抖音
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/DouYin.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Steam
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Steam.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Apple
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Apple.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Microsoft
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Microsoft.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Telegram
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Telegram.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Discord
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Discord.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Spotify
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Spotify.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: TikTok
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/TikTok.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: 加密货币
+    icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: YouTube
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/YouTube.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Netflix
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Netflix.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Google
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Google.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: GoogleFCM
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/GoogleFCM.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Facebook
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Facebook.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: OpenAI
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/OpenAI.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: GitHub
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/GitHub.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: Twitter(X)
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Twitter.svg"
+
+    type: select
+    proxies:
+      - 总模式
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: 香港地区
+    type: select
+    proxies:
+      - 香港自动
+    use:
+      - 落地机场
+    filter: "(?i)(香港|HK|Hong Kong)"
+
+  - name: 香港自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(香港|^HK|^🇭🇰)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 日本地区
+    type: select
+    proxies:
+      - 日本自动
+    use:
+      - 落地机场
+    filter: "(?i)(日本|JP|Japan)"
+
+  - name: 日本自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(日本|^JP|^🇯🇵)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 新加坡地区
+    type: select
+    proxies:
+      - 新加坡自动
+    use:
+      - 落地机场
+    filter: "(?i)(新加坡|SG|Singapore)"
+
+  - name: 新加坡自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(新加坡|^SG|^🇸🇬)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 美国地区
+    type: select
+    proxies:
+      - 美国自动
+    use:
+      - 落地机场
+    filter: "(?i)(美国|US|USA|United States)"
+
+  - name: 美国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(美国|^🇺🇸)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 英国地区
+    type: select
+    proxies:
+      - 英国自动
+    use:
+      - 落地机场
+    filter: "(?i)(英国|UK|United Kingdom)"
+
+  - name: 英国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(英国|^🇬🇧)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 德国地区
+    type: select
+    proxies:
+      - 德国自动
+    use:
+      - 落地机场
+    filter: "(?i)(德国|DE|Germany)"
+
+  - name: 德国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(德国|^🇩🇪)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 台湾地区
+    type: select
+    proxies:
+      - 台湾自动
+    use:
+      - 落地机场
+    filter: "(?i)(台湾|TW|Taiwan)"
+
+  - name: 台湾自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(台湾|^🇹🇼)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 韩国地区
+    type: select
+    proxies:
+      - 韩国自动
+    use:
+      - 落地机场
+    filter: "(?i)(韩国|KR|Korea)"
+
+  - name: 韩国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(韩国|^🇰🇷)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 荷兰地区
+    type: select
+    proxies:
+      - 荷兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(荷兰|NL|Netherlands)"
+
+  - name: 荷兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(荷兰|^🇳🇱)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 波兰地区
+    type: select
+    proxies:
+      - 波兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(波兰|PL|Poland)"
+
+  - name: 波兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(波兰|^🇵🇱)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 摩尔多瓦地区
+    type: select
+    proxies:
+      - 摩尔多瓦自动
+    use:
+      - 落地机场
+    filter: "(?i)(摩尔多瓦|Moldova)"
+
+  - name: 摩尔多瓦自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(摩尔多瓦|^🇲🇩)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 芬兰地区
+    type: select
+    proxies:
+      - 芬兰自动
+    use:
+      - 落地机场
+    filter: "(?i)(芬兰|Finland)"
+
+  - name: 芬兰自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(芬兰|^🇫🇮)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 印度地区
+    type: select
+    proxies:
+      - 印度自动
+    use:
+      - 落地机场
+    filter: "(?i)(印度|IN|India)"
+
+  - name: 印度自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(印度|^🇮🇳)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 泰国地区
+    type: select
+    proxies:
+      - 泰国自动
+    use:
+      - 落地机场
+    filter: "(?i)(泰国|TH|Thailand)"
+
+  - name: 泰国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(泰国|^🇹🇭)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 法国地区
+    type: select
+    proxies:
+      - 法国自动
+    use:
+      - 落地机场
+    filter: "(?i)(法国|FR|France|KataBump)"
+
+  - name: 法国自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(法国|KataBump|^🇫🇷)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 中国大陆地区
+    type: select
+    proxies:
+      - 中国大陆自动
+    use:
+      - 落地机场
+    filter: "(?i)(北京|乌兰察布|大陆)"
+
+  - name: 中国大陆自动
+    type: url-test
+    use:
+      - 落地机场
+    filter: "(?i)(北京|乌兰察布|大陆)"
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: GLOBAL
+    type: select
+    proxies:
+      - 总模式
+
+      - 抖音
+
+      - Steam
+
+      - Apple
+
+      - Microsoft
+
+      - Telegram
+
+      - Discord
+
+      - Spotify
+
+      - TikTok
+
+      - 加密货币
+
+      - YouTube
+
+      - Netflix
+
+      - Google
+
+      - GoogleFCM
+
+      - Facebook
+
+      - OpenAI
+
+      - GitHub
+
+      - Twitter(X)
+
+      - 手动选择
+      - 香港地区
+      - 香港自动
+      - 日本地区
+      - 日本自动
+      - 新加坡地区
+      - 新加坡自动
+      - 美国地区
+      - 美国自动
+      - 英国地区
+      - 英国自动
+      - 德国地区
+      - 德国自动
+      - 台湾地区
+      - 台湾自动
+      - 韩国地区
+      - 韩国自动
+      - 荷兰地区
+      - 荷兰自动
+      - 波兰地区
+      - 波兰自动
+      - 摩尔多瓦地区
+      - 摩尔多瓦自动
+      - 芬兰地区
+      - 芬兰自动
+      - 印度地区
+      - 印度自动
+      - 泰国地区
+      - 泰国自动
+      - 法国地区
+      - 法国自动
+      - 中国大陆地区
+      - 中国大陆自动
+      - 🇨🇳 大陆
+      - ⛔️ 拒绝连接
+
+  - name: 订阅更新
+    icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Update.svg"
+    type: select
+    proxies:
+      - 🇨🇳 大陆
+      - 总模式
+
+# -------------------- 规则集自动挂载 --------------------
+rule-providers:
+  我的直连规则:
+    type: http
+    behavior: classical
+    format: text
+    interval: 300
+    url: "https://panel.example/sub/rules/direct?token=reference-test-token"
+    path: ./rules/direct.list
+
+  WebRTC_端/域:
+    type: http
+    behavior: classical
+    format: text
+    interval: 86400
+    path: ./rules/WebRTC.list
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/rules/WebRTC.list"
+
+  抖音_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/抖音_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/DouYin/DouYin_OCD_Domain.mrs"
+
+  Steam_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Steam_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Steam/Steam_OCD_Domain.mrs"
+
+  Apple_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Apple_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Apple/Apple_OCD_Domain.mrs"
+
+  Apple_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Apple_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Apple/Apple_OCD_IP.mrs"
+
+  Microsoft_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Microsoft_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Microsoft/Microsoft_OCD_Domain.mrs"
+
+  Telegram_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Telegram_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Telegram/Telegram_OCD_Domain.mrs"
+
+  Telegram_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Telegram_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Telegram/Telegram_OCD_IP.mrs"
+
+  Discord_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Discord_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Discord/Discord_OCD_Domain.mrs"
+
+  Spotify_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Spotify_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Spotify/Spotify_OCD_Domain.mrs"
+
+  Spotify_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Spotify_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Spotify/Spotify_OCD_IP.mrs"
+
+  TikTok_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/TikTok_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/TikTok/TikTok_OCD_Domain.mrs"
+
+  加密货币_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/加密货币_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-cryptocurrency.mrs"
+
+  YouTube_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/YouTube_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/YouTube/YouTube_OCD_Domain.mrs"
+
+  YouTube_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/YouTube_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/YouTube/YouTube_OCD_IP.mrs"
+
+  Netflix_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Netflix_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Netflix/Netflix_OCD_Domain.mrs"
+
+  Netflix_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Netflix_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Netflix/Netflix_OCD_IP.mrs"
+
+  Google_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Google_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Google/Google_OCD_Domain.mrs"
+
+  Google_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Google_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Google/Google_OCD_IP.mrs"
+
+  GoogleFCM_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/GoogleFCM_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/GoogleFCM/GoogleFCM_OCD_Domain.mrs"
+
+  GoogleFCM_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/GoogleFCM_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/GoogleFCM/GoogleFCM_OCD_IP.mrs"
+
+  Facebook_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Facebook_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Facebook/Facebook_OCD_Domain.mrs"
+
+  Facebook_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Facebook_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Facebook/Facebook_OCD_IP.mrs"
+
+  OpenAI_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/OpenAI_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/OpenAI/OpenAI_OCD_Domain.mrs"
+
+  OpenAI_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/OpenAI_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/OpenAI/OpenAI_OCD_IP.mrs"
+
+  GitHub_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/GitHub_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/GitHub/GitHub_OCD_Domain.mrs"
+
+  Twitter(X)_域:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./rules/Twitter(X)_Domain.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Twitter/Twitter_OCD_Domain.mrs"
+
+  Twitter(X)_IP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    interval: 86400
+    path: ./rules/Twitter(X)_IP.mrs
+    url: "https://cdn.jsdelivr.net/gh/GitMetaio/rule@master/rule/Clash/Twitter/Twitter_OCD_IP.mrs"
+
+# -------------------- 路由规则分发 --------------------
+rules:
+  # 与个人配置保持一致：优先阻断常见 STUN/WebRTC 端口与关键字。
+  - DST-PORT,3478,REJECT
+  - DST-PORT,5349,REJECT
+  - DST-PORT,19302,REJECT
+  - DST-PORT,19305,REJECT
+  - DST-PORT,19307,REJECT
+  - DST-PORT,19308,REJECT
+  - DOMAIN-KEYWORD,stun,REJECT
+
+  # 本地/私网保持直连。
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,local,DIRECT
+
+  - RULE-SET,我的直连规则,DIRECT
+  - RULE-SET,WebRTC_端/域,REJECT
+
+  - PROCESS-PATH,com.ss.android.ugc.aweme,抖音
+
+  - RULE-SET,抖音_域,抖音
+
+  - RULE-SET,Steam_域,Steam
+
+  - RULE-SET,Apple_域,Apple
+
+  - RULE-SET,Apple_IP,Apple,no-resolve
+
+  - RULE-SET,Microsoft_域,Microsoft
+
+  - RULE-SET,Telegram_域,Telegram
+
+  - RULE-SET,Telegram_IP,Telegram,no-resolve
+
+  - RULE-SET,Discord_域,Discord
+
+  - RULE-SET,Spotify_域,Spotify
+
+  - RULE-SET,Spotify_IP,Spotify,no-resolve
+
+  - RULE-SET,TikTok_域,TikTok
+
+  - RULE-SET,加密货币_域,加密货币
+
+  - RULE-SET,YouTube_域,YouTube
+
+  - RULE-SET,YouTube_IP,YouTube,no-resolve
+
+  - RULE-SET,Netflix_域,Netflix
+
+  - RULE-SET,Netflix_IP,Netflix,no-resolve
+
+  - RULE-SET,Google_域,Google
+
+  - RULE-SET,Google_IP,Google,no-resolve
+
+  - DOMAIN-KEYWORD,mtalk.google,GoogleFCM
+
+  - RULE-SET,GoogleFCM_域,GoogleFCM
+
+  - RULE-SET,GoogleFCM_IP,GoogleFCM,no-resolve
+
+  - RULE-SET,Facebook_域,Facebook
+
+  - RULE-SET,Facebook_IP,Facebook,no-resolve
+
+  - RULE-SET,OpenAI_域,OpenAI
+
+  - RULE-SET,OpenAI_IP,OpenAI,no-resolve
+
+  - RULE-SET,GitHub_域,GitHub
+
+  - RULE-SET,Twitter(X)_域,Twitter(X)
+
+  - RULE-SET,Twitter(X)_IP,Twitter(X),no-resolve
+
+  - GEOSITE,CN,DIRECT
+  - GEOIP,CN,DIRECT,no-resolve
+  - MATCH,总模式

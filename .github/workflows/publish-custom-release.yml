@@ -10,13 +10,32 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.9
+  VERSION: v0.4.76-custom.10
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
+  go-test:
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.10' }}"
+    name: Verify v10 subscriptions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        run: go test ./...
+
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.10' }}"
+    needs: go-test
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -62,7 +81,8 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.10' }}"
+    needs: go-test
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -107,7 +127,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.10' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -135,15 +155,19 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.9
-            - 继续使用 custom.8 的旧版客户端中转方案，暂不切换服务端中转
-            - 保留总模式、中转策略、中转关闭、地区策略与落地 dialer-proxy
-            - 所有动态 *_IP RuleSet 引用追加 no-resolve，减少 IP 规则触发额外 DNS 解析
-            - 继续保持 Minimal Profile，不下发 dns: / tun: / sniffer: 等客户端运行时配置
+            ### v0.4.76-custom.10
+            - 对照用户验证正常的 no-resolve YAML，保留客户端中转、策略组顺序与落地 dialer-proxy
+            - 内置 IP RuleSet 和 GEOIP 保留 no-resolve，自定义直连、WebRTC、外部 classical 模块及自定义分流规则集补齐 no-resolve
+            - 保持参考配置的五个顶层区块，不下发 DNS/TUN/IPv6/Sniffer 等客户端运行时参数
+            - 订阅接口新增禁缓存响应与 X-NodeCTL-Version，防止更新后继续使用缓存的旧模板
+            - 新增脱敏参考 YAML 对照测试、全部规则集解析保护测试及真实订阅接口测试，发布前执行完整 Go 测试
             - Agent 保持 v0.2.77，本版无需升级 Agent
 
+            升级后请在客户端更新完整 Clash 订阅并重新加载配置，订阅地址无需更换。
+            no-resolve 防止规则匹配触发额外解析；实际 DNS 出口仍取决于客户端 DNS/TUN 设置，需在客户端复测。
+
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.9`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.10`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -154,7 +178,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.9' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.10' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

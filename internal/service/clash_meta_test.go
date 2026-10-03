@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"text/template"
@@ -30,19 +32,146 @@ type renderedClashConfig struct {
 		Proxies []string `yaml:"proxies"`
 		Use     []string `yaml:"use"`
 	} `yaml:"proxy-groups"`
+	RuleProviders map[string]struct {
+		Behavior string `yaml:"behavior"`
+	} `yaml:"rule-providers"`
 	Rules []string `yaml:"rules"`
+}
+
+func renderClashTemplateForTest(t *testing.T, data ClashTemplateData) []byte {
+	t.Helper()
+	tmpl, err := template.New("clash").Parse(ClashTemplateStr)
+	if err != nil {
+		t.Fatalf("parse template: %v", err)
+	}
+	var output bytes.Buffer
+	if err := tmpl.Execute(&output, data); err != nil {
+		t.Fatalf("render template: %v", err)
+	}
+	return output.Bytes()
+}
+
+// Keep the actual generated profile aligned with the user-verified reference,
+// including group order, relay chaining, rule order and client-owned DNS/TUN.
+func TestRenderClashMatchesNoResolveReference(t *testing.T) {
+	referenceBytes, err := os.ReadFile("testdata/clash-no-resolve-reference.yaml")
+	if err != nil {
+		t.Fatalf("read reference: %v", err)
+	}
+	var reference renderedClashConfig
+	var want map[string]any
+	if err := yaml.Unmarshal(referenceBytes, &reference); err != nil {
+		t.Fatalf("parse reference: %v", err)
+	}
+	if err := yaml.Unmarshal(referenceBytes, &want); err != nil {
+		t.Fatalf("parse reference sections: %v", err)
+	}
+	moduleByName := make(map[string]ClashModuleDef)
+	for _, module := range LoadClashModulesConfig().Modules {
+		moduleByName[module.Name] = module
+	}
+	var activeModules []ClashModuleDef
+	for _, group := range reference.ProxyGroups {
+		if module, ok := moduleByName[group.Name]; ok {
+			activeModules = append(activeModules, module)
+		}
+	}
+	if len(activeModules) != 17 {
+		t.Fatalf("reference modules = %d, want 17", len(activeModules))
+	}
+	data := ClashTemplateData{
+		RelaySubURL:         reference.ProxyProviders["中转机场"].URL,
+		ExitSubURL:          reference.ProxyProviders["落地机场"].URL,
+		BaseURL:             "https://panel.example",
+		Token:               "reference-test-token",
+		ActiveModules:       activeModules,
+		ProxiesInterval:     "3600",
+		RulesInterval:       "300",
+		PublicRulesInterval: "86400",
+	}
+	// v10 extends the reference's no-resolve protection to classical rule sets.
+	for i, rule := range reference.Rules {
+		parts := strings.Split(rule, ",")
+		if parts[0] == "RULE-SET" && reference.RuleProviders[parts[1]].Behavior == "classical" {
+			reference.Rules[i] = rule + ",no-resolve"
+		}
+	}
+	wantRules := make([]any, len(reference.Rules))
+	for i, rule := range reference.Rules {
+		wantRules[i] = rule
+	}
+	want["rules"] = wantRules
+	var got map[string]any
+	if err := yaml.Unmarshal(renderClashTemplateForTest(t, data), &got); err != nil {
+		t.Fatalf("parse generated profile: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("top-level sections = %d, want %d", len(got), len(want))
+	}
+	for section, expected := range want {
+		if !reflect.DeepEqual(got[section], expected) {
+			t.Errorf("generated %s differs from the user-verified reference", section)
+		}
+	}
+}
+
+func TestRenderClashRuleSetsDoNotResolveIPs(t *testing.T) {
+	modules := LoadClashModulesConfig().Modules
+	modules = append(modules,
+		ClashModuleDef{Name: "External", URL: "https://rules.example/external.list"},
+		ClashModuleDef{Name: "RejectExternal", Type: "reject", URL: "https://rules.example/reject.list", IPURL: "https://rules.example/reject.mrs"},
+	)
+	data := ClashTemplateData{
+		RelaySubURL:         "https://panel.example/sub/raw/1?token=x",
+		ExitSubURL:          "https://panel.example/sub/raw/2?token=x",
+		BaseURL:             "https://panel.example",
+		Token:               "x",
+		ActiveModules:       modules,
+		CustomProxies:       []CustomProxyRule{{ID: "custom", Name: "Custom", Content: "203.0.113.0/24\n2001:db8::/32\nexample.test"}},
+		ProxiesInterval:     "3600",
+		RulesInterval:       "300",
+		PublicRulesInterval: "86400",
+	}
+	var config renderedClashConfig
+	if err := yaml.Unmarshal(renderClashTemplateForTest(t, data), &config); err != nil {
+		t.Fatalf("parse generated profile: %v", err)
+	}
+	seen := make(map[string]bool)
+	for _, rule := range config.Rules {
+		parts := strings.Split(rule, ",")
+		if parts[0] != "RULE-SET" {
+			continue
+		}
+		provider, ok := config.RuleProviders[parts[1]]
+		if !ok {
+			t.Fatalf("rule references unknown provider: %s", rule)
+		}
+		seen[parts[1]] = true
+		if provider.Behavior == "ipcidr" || provider.Behavior == "classical" {
+			if len(parts) != 4 || parts[3] != "no-resolve" {
+				t.Errorf("IP-capable provider can trigger DNS resolution: %s", rule)
+			}
+		} else if len(parts) != 3 {
+			t.Errorf("domain-only rule unexpectedly changed: %s", rule)
+		}
+	}
+	for name := range config.RuleProviders {
+		if !seen[name] {
+			t.Errorf("rule provider has no routing reference: %s", name)
+		}
+	}
 }
 
 func TestRenderClashPolicyOrderAndReferences(t *testing.T) {
 	data := ClashTemplateData{
-		RelaySubURL:             "https://panel.example/sub/raw/1?token=x",
-		ExitSubURL:              "https://panel.example/sub/raw/2?token=x",
-		BaseURL:                 "https://panel.example",
-		Token:                   "x",
-		ActiveModules:           []ClashModuleDef{{Name: "Telegram", Icon: "https://example.test/telegram.svg"}, {Name: "加密货币", Icon: "💱"}},
-		ProxiesInterval:         "3600",
-		RulesInterval:           "300",
-		PublicRulesInterval:     "86400",
+		RelaySubURL:         "https://panel.example/sub/raw/1?token=x",
+		ExitSubURL:          "https://panel.example/sub/raw/2?token=x",
+		BaseURL:             "https://panel.example",
+		Token:               "x",
+		ActiveModules:       []ClashModuleDef{{Name: "Telegram", Icon: "https://example.test/telegram.svg"}, {Name: "加密货币", Icon: "💱"}},
+		ProxiesInterval:     "3600",
+		RulesInterval:       "300",
+		PublicRulesInterval: "86400",
 	}
 	tmpl, err := template.New("clash").Parse(ClashTemplateStr)
 	if err != nil {
