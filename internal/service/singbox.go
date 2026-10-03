@@ -57,7 +57,11 @@ func SingBoxMinor(version string) (int, error) {
 }
 
 func loadSingBoxProfile(baseURL, token string) (*singBoxProfile, error) {
-	text, err := RenderClashConfig("", "", baseURL, token)
+	return loadSingBoxProfileWithTopology(baseURL, token, TopologyChain)
+}
+
+func loadSingBoxProfileWithTopology(baseURL, token string, topology SubscriptionTopology) (*singBoxProfile, error) {
+	text, err := RenderClashConfigWithTopology("", "", baseURL, token, topology)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +76,13 @@ func loadSingBoxProfile(baseURL, token string) (*singBoxProfile, error) {
 
 // GenerateSingBoxConfig shares node collection and routing policy with the Clash exporter.
 func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) ([]byte, []string, error) {
+	return GenerateSingBoxConfigWithTopology(baseURL, token, version, mode, useFlag, TopologyChain)
+}
+
+func GenerateSingBoxConfigWithTopology(baseURL, token, version, mode string, useFlag bool, topology SubscriptionTopology) ([]byte, []string, error) {
+	if _, err := ParseSubscriptionTopology(string(topology)); err != nil {
+		return nil, nil, err
+	}
 	minor, err := SingBoxMinor(version)
 	if err != nil {
 		return nil, nil, err
@@ -87,6 +98,9 @@ func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) (
 		name    string
 		routing int
 	}{{"中转机场", 1}, {"落地机场", 2}} {
+		if topology == TopologySingle && pool.routing == 1 {
+			continue
+		}
 		raw, e := GenerateRawNodesYAML(pool.routing, useFlag)
 		if e != nil {
 			return nil, nil, e
@@ -95,17 +109,33 @@ func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) (
 		if e = yaml.Unmarshal([]byte(raw), &provider); e != nil {
 			return nil, nil, e
 		}
-		pools[pool.name] = provider.Proxies
+		poolName := pool.name
+		if topology == TopologySingle {
+			poolName = "provider1"
+		}
+		pools[poolName] = provider.Proxies
 	}
-	p, err := loadSingBoxProfile(baseURL, token)
+	p, err := loadSingBoxProfileWithTopology(baseURL, token, topology)
 	if err != nil {
 		return nil, nil, err
 	}
-	return buildSingBoxConfig(p, pools, baseURL, token, minor, mode)
+	return buildSingBoxConfigWithTopology(p, pools, baseURL, token, minor, mode, topology)
 }
 
 func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string) ([]byte, []string, error) {
-	out := []sbObject{{"type": "direct", "tag": "🇨🇳 大陆"}, {"type": "direct", "tag": "中转关闭"}}
+	return buildSingBoxConfigWithTopology(p, pools, baseURL, token, minor, mode, TopologyChain)
+}
+
+func buildSingBoxConfigWithTopology(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string, topology SubscriptionTopology) ([]byte, []string, error) {
+	out := []sbObject{{"type": "direct", "tag": "🇨🇳 大陆"}}
+	landingPool, bootstrapDetour := "落地机场", "中转关闭"
+	poolNames := []string{"中转机场", "落地机场"}
+	if topology == TopologySingle {
+		landingPool, bootstrapDetour = "provider1", "🇨🇳 大陆"
+		poolNames = []string{landingPool}
+	} else {
+		out = append(out, sbObject{"type": "direct", "tag": "中转关闭"})
+	}
 	reserved := map[string]bool{"🇨🇳 大陆": true, "中转关闭": true, "dns-out": true, "block": true}
 	for _, g := range p.Groups {
 		if reserved[g.Name] {
@@ -116,7 +146,7 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 	poolTags := map[string][]string{}
 	originalNames := map[string]string{}
 	var warnings []string
-	for _, pool := range []string{"中转机场", "落地机场"} {
+	for _, pool := range poolNames {
 		nodes := append([]*ClashNode(nil), pools[pool]...)
 		sort.SliceStable(nodes, func(i, j int) bool {
 			return fmt.Sprintf("%s/%s/%s/%d", nodes[i].Name, nodes[i].Type, nodes[i].Server, nodes[i].Port) < fmt.Sprintf("%s/%s/%s/%d", nodes[j].Name, nodes[j].Type, nodes[j].Server, nodes[j].Port)
@@ -131,6 +161,9 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 				continue
 			}
 			prefix := "落地 · "
+			if topology == TopologySingle {
+				prefix = "节点 · "
+			}
 			if pool == "中转机场" {
 				prefix = "中转 · "
 			}
@@ -140,7 +173,7 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 			}
 			reserved[tag] = true
 			ob["tag"] = tag
-			if pool == "落地机场" {
+			if topology != TopologySingle && pool == landingPool {
 				ob["detour"] = "💠 中转策略"
 			}
 			out = append(out, ob)
@@ -148,11 +181,14 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 			originalNames[tag] = n.Name
 		}
 	}
-	if len(poolTags["落地机场"]) == 0 {
+	if len(poolTags[landingPool]) == 0 {
 		return nil, warnings, fmt.Errorf("没有适用于 sing-box 1.%d 的落地节点，请配置落地节点或选择其他内核版本", minor)
 	}
 	// Determine available region groups from actual compatible nodes; no empty selectors.
 	available := map[string]bool{"🇨🇳 大陆": true, "中转关闭": true}
+	if topology == TopologySingle {
+		delete(available, "中转关闭")
+	}
 	groupNodes := map[string][]string{}
 	for _, g := range p.Groups {
 		var filter *regexp.Regexp
@@ -179,6 +215,9 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		tags := []string{}
 		seen := map[string]bool{}
 		for _, tag := range append(append([]string{}, g.Proxies...), groupNodes[g.Name]...) {
+			if tag == "DIRECT" {
+				tag = "🇨🇳 大陆"
+			}
 			if (available[tag] || originalNames[tag] != "") && !seen[tag] {
 				tags = append(tags, tag)
 				seen[tag] = true
@@ -312,7 +351,7 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		dns["servers"] = []sbObject{{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "总模式"}, {"type": "https", "tag": "dns-bootstrap", "server": "223.5.5.5"}}
 		route["default_domain_resolver"] = "dns-bootstrap"
 	} else {
-		dns["servers"] = []sbObject{{"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "detour": "总模式"}, {"tag": "dns-bootstrap", "address": "https://223.5.5.5/dns-query", "detour": "中转关闭"}}
+		dns["servers"] = []sbObject{{"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "detour": "总模式"}, {"tag": "dns-bootstrap", "address": "https://223.5.5.5/dns-query", "detour": bootstrapDetour}}
 		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
 	}
 	dnsRules, _ := dns["rules"].([]sbObject)

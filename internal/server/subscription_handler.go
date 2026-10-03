@@ -48,12 +48,17 @@ func apiSubClash(w http.ResponseWriter, r *http.Request) {
 
 	baseURL := getBaseURL(r)
 	token := r.URL.Query().Get("token")
+	topology, err := service.ParseSubscriptionTopology(r.URL.Query().Get("topology"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// routing_type=1 是中转节点，routing_type=2 是落地节点。
-	relayURL := fmt.Sprintf("%s/sub/raw/1?token=%s", baseURL, token)
-	exitURL := fmt.Sprintf("%s/sub/raw/2?token=%s", baseURL, token)
+	relayURL := fmt.Sprintf("%s/sub/raw/1?token=%s", baseURL, url.QueryEscape(token))
+	exitURL := fmt.Sprintf("%s/sub/raw/2?token=%s", baseURL, url.QueryEscape(token))
 
-	yamlContent, err := service.RenderClashConfig(relayURL, exitURL, baseURL, token)
+	yamlContent, err := service.RenderClashConfigWithTopology(relayURL, exitURL, baseURL, token, topology)
 	if err != nil {
 		logger.Log.Error("生成 Clash 订阅模板失败", "error", err, "ip", clientIP, "path", reqPath)
 		http.Error(w, "模板生成失败", http.StatusInternalServerError)
@@ -71,6 +76,7 @@ func apiSubClash(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("X-NodeCTL-Version", version.Version)
+	w.Header().Set("X-NodeCTL-Topology", string(topology))
 	w.Header().Set("profile-title", subName)
 
 	if userinfo := service.GetSubscriptionUserinfo(); userinfo != "" {
@@ -92,12 +98,17 @@ func apiSubV2ray(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Token", http.StatusForbidden)
 		return
 	}
+	topology, err := service.ParseSubscriptionTopology(r.URL.Query().Get("topology"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	var flagConfig database.SysConfig
 	database.DB.Where("key = ?", "pref_use_emoji_flag").First(&flagConfig)
 	useFlag := flagConfig.Value != "false"
 
-	b64Content, err := service.GenerateV2RaySubBase64(useFlag)
+	b64Content, err := service.GenerateV2RaySubBase64WithTopology(useFlag, topology)
 	if err != nil {
 		logger.Log.Error("生成 V2Ray Base64 订阅失败", "error", err, "ip", clientIP, "path", reqPath)
 		http.Error(w, "订阅生成失败", http.StatusInternalServerError)
@@ -113,6 +124,9 @@ func apiSubV2ray(w http.ResponseWriter, r *http.Request) {
 
 	logger.Log.Info("成功下发 V2Ray Base64 订阅", "ip", clientIP, "path", reqPath)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("X-NodeCTL-Version", version.Version)
+	w.Header().Set("X-NodeCTL-Topology", string(topology))
 	w.Header().Set("profile-title", subName)
 
 	if userinfo := service.GetSubscriptionUserinfo(); userinfo != "" {

@@ -458,6 +458,13 @@
                 <input type="text" id="inputSubName" class="sub-name-input" placeholder="例如：我的私人节点池"
                     oninput="saveCustomSubNameDebounced()">
 
+                <label class="sub-section-label" for="subTopologyChoice">🔗 订阅版本</label>
+                <select id="subTopologyChoice" class="sub-name-input" onchange="changeSubTopology(this.value)">
+                    <option value="chain">现有版本（中转 + 落地）</option>
+                    <option value="single">单节点池（无中转）</option>
+                </select>
+                <div id="subTopologyDescription" class="sub-right-desc" style="margin-top:-18px;margin-bottom:22px">Clash / sing-box 保留中转策略；Base64 汇总中转和落地节点。</div>
+
                 <label class="sub-section-label">📌 选择订阅格式</label>
 
                 <div class="format-wrapper" id="wrap_clash">
@@ -525,6 +532,7 @@
     let currentBaseUrl = '';
     let currentToken = '';
     let currentFormatKey = null;
+    let selectedSubTopology = 'chain';
 
     let selectedSingBoxCore = '1.14';
     let selectedSingBoxMode = 'mobile';
@@ -535,19 +543,34 @@
         clash: {
             title: "😼 Clash Meta 订阅",
             desc: "推荐使用 <b>Clash Verge Rev</b> 或 <b>OpenClash</b>。<br>手机端可直接扫描下方二维码添加。",
-            getLink: () => `${currentBaseUrl}/sub/clash?token=${currentToken}`
+            getLink: () => `${currentBaseUrl}/sub/clash?token=${encodeURIComponent(currentToken)}${subTopologyQuery()}`
         },
         singbox: {
             title: "📦 sing-box 订阅",
             desc: "请选择客户端实际使用的<b>内核版本</b>。手机请选择完整 VPN 配置；桌面配置额外提供本地代理端口。配置片段不能单独启动 VPN。AnyTLS 需要 1.12+，SSR 不受支持。",
-            getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}`
+            getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}${subTopologyQuery()}`
         },
         v2ray: {
             title: "🌐 V2Ray / 通用 Base64",
-            desc: "适用于 <b>v2rayN</b>、<b>v2rayNG</b>、<b>Shadowrocket</b> 等绝大多数基础代理工具。",
-            getLink: () => `${currentBaseUrl}/sub/v2ray?token=${currentToken}`
+            desc: "适用于 <b>v2rayN</b>、<b>v2rayNG</b>、<b>Shadowrocket</b> 等基础代理工具。Base64 只包含节点链接，无法携带策略组、分流规则或 VPN 设置。",
+            getLink: () => `${currentBaseUrl}/sub/v2ray?token=${encodeURIComponent(currentToken)}${subTopologyQuery()}`
         }
     };
+
+    function subTopologyQuery() {
+        return selectedSubTopology === 'single' ? '&topology=single' : '';
+    }
+
+    function changeSubTopology(value) {
+        selectedSubTopology = value === 'single' ? 'single' : 'chain';
+        document.getElementById('subTopologyDescription').textContent = selectedSubTopology === 'single'
+            ? '仅使用落地节点池，节点直接连接；Clash / sing-box 保留软件和地区策略组，不显示中转策略。'
+            : 'Clash / sing-box 保留中转策略；Base64 汇总中转和落地节点。';
+        if (currentFormatKey) {
+            renderRightPanel(currentFormatKey);
+            resizeSubLinkTextarea();
+        }
+    }
 
     function refreshSingBoxPanel() {
         renderRightPanel('singbox');

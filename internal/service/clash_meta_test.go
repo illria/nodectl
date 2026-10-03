@@ -51,6 +51,73 @@ func renderClashTemplateForTest(t *testing.T, data ClashTemplateData) []byte {
 	return output.Bytes()
 }
 
+func TestRenderClashSingleProviderMatchesReference(t *testing.T) {
+	data, err := os.ReadFile("testdata/clash-single-provider-reference.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reference, got map[string]any
+	if err = yaml.Unmarshal(data, &reference); err != nil {
+		t.Fatal(err)
+	}
+	modules := map[string]ClashModuleDef{}
+	for _, m := range LoadClashModulesConfig().Modules {
+		modules[m.Name] = m
+	}
+	active := []ClashModuleDef{}
+	for _, g := range reference["proxy-groups"].([]any) {
+		if m, ok := modules[g.(map[string]any)["name"].(string)]; ok {
+			active = append(active, m)
+		}
+	}
+	provider := reference["proxy-providers"].(map[string]any)["provider1"].(map[string]any)
+	output := renderClashTemplateForTest(t, ClashTemplateData{SingleProvider: true, ExitSubURL: provider["url"].(string), BaseURL: "https://panel.example", Token: "reference-test-token", ActiveModules: active, ProxiesInterval: "3600", RulesInterval: "300", PublicRulesInterval: "86400"})
+	if err = yaml.Unmarshal(output, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(reference["proxy-providers"], got["proxy-providers"]) {
+		t.Fatal("single provider differs from the user's reference")
+	}
+	// Cosmetic icons may evolve; all group names, order, options, provider use,
+	// filters and URL-test intervals must match the uploaded single-pool file.
+	for _, doc := range []map[string]any{reference, got} {
+		for _, g := range doc["proxy-groups"].([]any) {
+			delete(g.(map[string]any), "icon")
+		}
+	}
+	if !reflect.DeepEqual(reference["proxy-groups"], got["proxy-groups"]) {
+		t.Fatal("single-pool strategy groups differ from the user's reference")
+	}
+	for _, key := range []string{"proxies", "dns", "tun", "sniffer"} {
+		if _, ok := got[key]; ok {
+			t.Fatal("single-pool profile adds runtime/proxy overrides", key)
+		}
+	}
+	for _, text := range []string{"中转机场", "中转策略", "中转关闭", "dialer-proxy"} {
+		if strings.Contains(string(output), text) {
+			t.Fatal("single-pool profile still contains relay configuration", text)
+		}
+	}
+	// The uploaded file contains core rules; keep these in order and preserve
+	// the configured software/custom rule sets in the generated subscription.
+	rules := got["rules"].([]any)
+	start := 0
+	for _, want := range reference["rules"].([]any) {
+		found := false
+		for start < len(rules) {
+			candidate := rules[start]
+			start++
+			if candidate == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("core routing rule missing or reordered", want)
+		}
+	}
+}
+
 // Keep the actual generated profile aligned with the user-verified reference,
 // including group order, relay chaining, rule order and client-owned DNS/TUN.
 func TestRenderClashMatchesNoResolveReference(t *testing.T) {
