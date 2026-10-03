@@ -51,9 +51,16 @@ class DNS(socketserver.BaseRequestHandler):
                 name = '.'.join(labels).lower()
                 kind = struct.unpack('!H', query[offset + 1:offset + 3])[0]
                 self.server.queries.append(name)
+                self.server.questions.append((name, kind))
                 answer = b''
                 if kind == 1:
                     answer = b'\xc0\x0c' + struct.pack('!HHIH', 1, 1, 60, 4) + socket.inet_aton(self.server.answer)
+                elif kind == 28:
+                    answer = b'\xc0\x0c' + struct.pack('!HHIH', 28, 1, 60, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
+                elif kind in (64, 65):
+                    # SVCB/HTTPS priority 1, root target, ipv6hint parameter.
+                    data = b'\x00\x01\x00' + struct.pack('!HH', 6, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
+                    answer = b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 60, len(data)) + data
                 response = query[:2] + struct.pack('!HHHHH', 0x8180, 1, int(bool(answer)), 0, 0) + query[12:end] + answer
                 self.request.sendall(struct.pack('!H', len(response)) + response)
         except (EOFError, OSError):
@@ -138,13 +145,18 @@ def socks_connection(port, host, destination_port, payload):
         raise
 
 
-def dns_query(port, host):
+def dns_query(port, host, kind=1):
     name = b''.join(bytes([len(label)]) + label.encode() for label in host.split('.')) + b'\x00'
-    query = struct.pack('!HHHHHH', 42, 0x0100, 1, 0, 0, 0) + name + struct.pack('!HH', 1, 1)
+    query = struct.pack('!HHHHHH', 42, 0x0100, 1, 0, 0, 0) + name + struct.pack('!HH', kind, 1)
     with socks_connection(port, '8.8.8.8', 53, struct.pack('!H', len(query)) + query) as connection:
         response = read_exact(connection, struct.unpack('!H', read_exact(connection, 2))[0])
-    assert response[:2] == query[:2] and response[3] & 15 == 0 and struct.unpack('!H', response[6:8])[0] == 1, response
-    return socket.inet_ntoa(response[-4:])
+    assert response[:2] == query[:2] and response[3] & 15 == 0, response
+    count = struct.unpack('!H', response[6:8])[0]
+    if count == 0:
+        return None
+    assert count == 1, response
+    ipv6 = kind in (28, 64, 65)
+    return socket.inet_ntop(socket.AF_INET6 if ipv6 else socket.AF_INET, response[-16:] if ipv6 else response[-4:])
 
 
 def visit(port, host, website_port):
@@ -168,8 +180,10 @@ assert any(i['type'] == 'tun' for i in config['inbounds'])
 
 direct = Server(('127.0.0.1', 0), DNS)
 direct.queries, direct.answer = [], '127.0.0.1'
+direct.questions, direct.answer6 = [], '2001:db8::1'
 remote = Server(('127.0.0.1', 0), DNS)
 remote.queries, remote.answer = [], '127.0.0.2'
+remote.questions, remote.answer6 = [], '2001:db8::2'
 website = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Website)
 proxy = Server(('127.0.0.1', 0), Proxy)
 proxy.connections = []
@@ -205,6 +219,9 @@ try:
         config['outbounds'].append({'type': 'http', 'tag': 'policy-proxy', 'server': '127.0.0.1', 'server_port': proxy.server_address[1]})
         for server in config['dns']['servers']:
             tag = server['tag']
+            if tag == 'dns-ipv4-compat':
+                assert server['address'] == 'rcode://success', 'IPv4 hint rule must not access another DNS server'
+                continue
             direct_detour = server.get('detour', '🇨🇳 大陆')
             assert server.get('type', 'https') == 'https', 'Generated DNS must stay encrypted'
             assert tag != 'dns-remote' or server['detour'] == '总模式'
@@ -239,6 +256,16 @@ try:
 
                 def check(host, expected, proxied):
                     assert dns_query(port, host) == expected, (host, 'wrong DNS server or cross-mode cache')
+                    # 1.14 may refresh A records asynchronously. Only forbidden
+                    # IPv6/hint query types count toward this family assertion.
+                    def family_queries():
+                        return sum(kind in (28, 64, 65) for _, kind in direct.questions + remote.questions)
+                    queries_before = family_queries()
+                    expected6 = (remote if proxied else direct).answer6 if config['dns']['strategy'] != 'ipv4_only' else None
+                    for kind in [28, 64, 65]:
+                        assert dns_query(port, host, kind) == expected6, (host, kind, 'wrong AAAA/SVCB/HTTPS address policy')
+                    if expected6 is None:
+                        assert family_queries() == queries_before, (host, 'IPv4-only mode sent an upstream AAAA/SVCB/HTTPS query')
                     assert expected != direct.answer or host not in remote.queries, (host, 'domestic DNS crossed proxy')
                     before = len([c for c in proxy.connections if c[1] == website.server_port])
                     visit(port, host, website.server_port)
@@ -251,18 +278,20 @@ try:
                 check('unmatched-overseas.test', remote.answer, True)
                 assert 'unmatched-overseas.test' not in direct.queries, 'Overseas DNS leaked to domestic resolver'
                 mode('Global')
+                assert dns_query(port, domestic[0], 28) == (None if config['dns']['strategy'] == 'ipv4_only' else remote.answer6), 'Global has wrong AAAA policy'
                 assert dns_query(port, domestic[0]) == remote.answer, 'Global reused direct DNS cache'
                 before = len([c for c in proxy.connections if c[1] == website.server_port])
                 visit(port, domestic[0], website.server_port)
                 assert len([c for c in proxy.connections if c[1] == website.server_port]) == before + 1, 'Global did not use proxy'
                 mode('Direct')
+                assert dns_query(port, 'unmatched-overseas.test', 28) == (None if config['dns']['strategy'] == 'ipv4_only' else direct.answer6), 'Direct has wrong AAAA policy'
                 assert dns_query(port, 'unmatched-overseas.test') == direct.answer, 'Direct reused proxy DNS cache'
                 before = len(proxy.connections)
                 visit(port, 'unmatched-overseas.test', website.server_port)
                 assert len(proxy.connections) == before, 'Direct used proxy'
                 mode('Rule')
                 assert dns_query(port, domestic[0]) == direct.answer, 'Rule reused Global DNS cache'
-                print('Domestic CDN and app-selector traffic/DNS direct; overseas traffic/DNS proxy; cross-mode DNS cache isolation passed')
+                print(f'Domestic CDN and app-selector traffic/DNS direct; overseas traffic/DNS proxy; cross-mode DNS cache isolation; A/AAAA/HTTPS/SVCB {config["dns"]["strategy"]} policy passed')
             except BaseException:
                 print(log.read_text())
                 raise

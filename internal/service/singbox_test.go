@@ -42,6 +42,69 @@ func TestSingBoxVersions(t *testing.T) {
 	}
 }
 
+func TestSingBoxIPModes(t *testing.T) {
+	for _, topology := range []SubscriptionTopology{TopologyChain, TopologySingle} {
+		profile := singBoxTestProfileWithTopology(t, topology)
+		pool, suffix := "落地机场", ""
+		if topology == TopologySingle {
+			pool, suffix = "provider1", "-single"
+		}
+		// DNS address selection must not discard explicit IPv6 node endpoints.
+		pools := map[string][]*ClashNode{pool: {
+			{Name: "香港 IPv4", Type: "socks5", Server: "192.0.2.1", Port: 1080},
+			{Name: "香港 IPv6", Type: "socks5", Server: "2001:db8::1", Port: 1080},
+		}}
+		for minor := 8; minor <= 14; minor++ {
+			for _, mode := range []string{"mobile", "full", "outbounds"} {
+				for _, requested := range []SingBoxIPMode{"", SingBoxIPv4Only, SingBoxDualStack} {
+					data, _, err := buildSingBoxConfigWithIPMode(profile, pools, "https://panel.example", "secret", minor, mode, topology, requested)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var config map[string]interface{}
+					if err = json.Unmarshal(data, &config); err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(string(data), "2001:db8::1") {
+						t.Fatal("IPv6 node endpoint removed")
+					}
+					if mode == "outbounds" {
+						if len(config) != 1 {
+							t.Fatal("fragment includes DNS settings")
+						}
+						continue
+					}
+					resolved, err := ParseSingBoxIPMode(string(requested), mode)
+					if err != nil {
+						t.Fatal(err)
+					}
+					strategy := "prefer_ipv4"
+					if resolved == SingBoxIPv4Only {
+						strategy = "ipv4_only"
+					}
+					if config["dns"].(map[string]interface{})["strategy"] != strategy {
+						t.Fatal("wrong DNS address family", mode, requested)
+					}
+					if !strings.Contains(string(data), "fdfe:dcba:9876::1/126") {
+						t.Fatal("IPv6 TUN capture removed")
+					}
+					if dir := os.Getenv("NODECTL_SINGBOX_FIXTURES"); dir != "" && mode == "mobile" && requested == SingBoxDualStack {
+						if err = os.MkdirAll(dir, 0755); err != nil {
+							t.Fatal(err)
+						}
+						if err = os.WriteFile(filepath.Join(dir, fmt.Sprintf("1.%d%s-dual-mobile.json", minor, suffix)), data, 0600); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			if _, _, err := buildSingBoxConfigWithIPMode(profile, pools, "", "", minor, "mobile", topology, "invalid"); err == nil {
+				t.Fatal("invalid IP mode accepted")
+			}
+		}
+	}
+}
+
 func TestSingBoxDomesticPolicy(t *testing.T) {
 	p := singBoxTestProfile(t)
 	pools := map[string][]*ClashNode{"落地机场": {{Name: "香港", Type: "socks5", Server: "192.0.2.1", Port: 1080}}}

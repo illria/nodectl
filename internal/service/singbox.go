@@ -80,6 +80,10 @@ func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) (
 }
 
 func GenerateSingBoxConfigWithTopology(baseURL, token, version, mode string, useFlag bool, topology SubscriptionTopology) ([]byte, []string, error) {
+	return GenerateSingBoxConfigWithIPMode(baseURL, token, version, mode, useFlag, topology, "")
+}
+
+func GenerateSingBoxConfigWithIPMode(baseURL, token, version, mode string, useFlag bool, topology SubscriptionTopology, ipMode SingBoxIPMode) ([]byte, []string, error) {
 	if _, err := ParseSubscriptionTopology(string(topology)); err != nil {
 		return nil, nil, err
 	}
@@ -119,7 +123,7 @@ func GenerateSingBoxConfigWithTopology(baseURL, token, version, mode string, use
 	if err != nil {
 		return nil, nil, err
 	}
-	return buildSingBoxConfigWithTopology(p, pools, baseURL, token, minor, mode, topology)
+	return buildSingBoxConfigWithIPMode(p, pools, baseURL, token, minor, mode, topology, ipMode)
 }
 
 func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string) ([]byte, []string, error) {
@@ -127,6 +131,14 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 }
 
 func buildSingBoxConfigWithTopology(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string, topology SubscriptionTopology) ([]byte, []string, error) {
+	return buildSingBoxConfigWithIPMode(p, pools, baseURL, token, minor, mode, topology, "")
+}
+
+func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string, topology SubscriptionTopology, ipMode SingBoxIPMode) ([]byte, []string, error) {
+	ipMode, err := ParseSingBoxIPMode(string(ipMode), mode)
+	if err != nil {
+		return nil, nil, err
+	}
 	out := []sbObject{{"type": "direct", "tag": "🇨🇳 大陆"}}
 	landingPool, bootstrapDetour := "落地机场", "中转关闭"
 	poolNames := []string{"中转机场", "落地机场"}
@@ -342,6 +354,9 @@ func buildSingBoxConfigWithTopology(p *singBoxProfile, pools map[string][]*Clash
 	}
 	route := sbObject{"rules": rules, "rule_set": sets, "final": "总模式", "auto_detect_interface": true}
 	dns := sbObject{"final": "dns-remote", "strategy": "prefer_ipv4", "reverse_mapping": true}
+	if ipMode == SingBoxIPv4Only {
+		dns["strategy"] = "ipv4_only"
+	}
 	if minor < 14 {
 		// Older cores share answers across servers by default. A Global answer
 		// must not be reused after switching back to domestic Rule-mode DNS.
@@ -355,6 +370,22 @@ func buildSingBoxConfigWithTopology(p *singBoxProfile, pools map[string][]*Clash
 		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
 	}
 	dnsRules, _ := dns["rules"].([]sbObject)
+	if ipMode == SingBoxIPv4Only {
+		// Older cores do not filter ipv6hint from HTTPS/SVCB responses. Clients
+		// can use those hints even without AAAA answers. Fall back to A lookups.
+		hintRule := sbObject{"query_type": []string{"HTTPS", "SVCB"}}
+		if minor >= 12 {
+			hintRule["action"], hintRule["rcode"] = "predefined", "NOERROR"
+		} else {
+			servers := dns["servers"].([]sbObject)
+			dns["servers"] = append(servers, sbObject{"tag": "dns-ipv4-compat", "address": "rcode://success"})
+			hintRule["server"] = "dns-ipv4-compat"
+			if minor >= 11 {
+				hintRule["action"] = "route"
+			}
+		}
+		dnsRules = append([]sbObject{hintRule}, dnsRules...)
+	}
 	for _, m := range []struct{ name, server string }{{"Direct", "dns-bootstrap"}, {"Global", "dns-remote"}} {
 		rule := sbObject{"clash_mode": m.name, "server": m.server}
 		if minor >= 11 {

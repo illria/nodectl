@@ -86,21 +86,26 @@ async function checkModal(width) {
             choose('singBoxVersion', version);
             for (const mode of ['outbounds', 'full', 'mobile']) {
                 choose('singBoxMode', mode);
-                for (const topology of ['chain', 'single']) {
-                    choose('subTopologyChoice', topology);
-                    await flush();
-                    const link = new URL(checkLink('singbox', topology));
-                    assert.equal(link.searchParams.get('version'), version);
-                    assert.equal(link.searchParams.get('mode'), mode);
-                    assert.equal(document.getElementById('singBoxVersion').value, version);
-                    assert.equal(document.getElementById('singBoxMode').value, mode);
-                    const inspected = inspections.at(-1);
-                    for (const key of ['version', 'mode', 'topology', 'token']) {
-                        assert.equal(inspected.searchParams.get(key), link.searchParams.get(key));
+                for (const ip of ['dual', 'ipv4']) {
+                    choose('singBoxIPMode', ip);
+                    for (const topology of ['chain', 'single']) {
+                        choose('subTopologyChoice', topology);
+                        await flush();
+                        const link = new URL(checkLink('singbox', topology));
+                        assert.equal(link.searchParams.get('version'), version);
+                        assert.equal(link.searchParams.get('mode'), mode);
+                        assert.equal(link.searchParams.get('ip'), ip);
+                        assert.equal(document.getElementById('singBoxVersion').value, version);
+                        assert.equal(document.getElementById('singBoxMode').value, mode);
+                        assert.equal(document.getElementById('singBoxIPMode').value, ip);
+                        const inspected = inspections.at(-1);
+                        for (const key of ['version', 'mode', 'ip', 'topology', 'token']) {
+                            assert.equal(inspected.searchParams.get(key), link.searchParams.get(key));
+                        }
+                        const status = document.getElementById('singBoxCompatibility').textContent;
+                        assert(status.includes(version === '1.8' ? 'AnyTLS' : '检查通过'), status);
+                        assert.equal(!!document.querySelector('#subRightContent [role="alert"]'), mode === 'outbounds');
                     }
-                    const status = document.getElementById('singBoxCompatibility').textContent;
-                    assert(status.includes(version === '1.8' ? 'AnyTLS' : '检查通过'), status);
-                    assert.equal(!!document.querySelector('#subRightContent [role="alert"]'), mode === 'outbounds');
                 }
             }
         }
