@@ -66,6 +66,45 @@ func TestSingBoxSubscriptionAndRules(t *testing.T) {
 			t.Fatal("invalid input accepted", path)
 		}
 	}
+	for _, topology := range []string{"chain", "single"} {
+		for _, mode := range []string{"", "mobile", "full"} {
+			for _, ip := range []string{"", "ipv4", "dual", "invalid"} {
+				w := httptest.NewRecorder()
+				apiSubSingBox(w, httptest.NewRequest("GET", "https://panel.example/sub/singbox?token=secret&topology="+topology+"&mode="+mode+"&ip="+ip, nil))
+				if ip == "invalid" {
+					if w.Code != 400 {
+						t.Fatal("invalid IP mode accepted", w.Code)
+					}
+					continue
+				}
+				if w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+				var config struct {
+					DNS struct {
+						Strategy string `json:"strategy"`
+					} `json:"dns"`
+				}
+				if e = json.Unmarshal(w.Body.Bytes(), &config); e != nil {
+					t.Fatal(e)
+				}
+				resolved := ip
+				if resolved == "" {
+					resolved = "ipv4"
+					if mode == "full" {
+						resolved = "dual"
+					}
+				}
+				strategy := "prefer_ipv4"
+				if resolved == "ipv4" {
+					strategy = "ipv4_only"
+				}
+				if config.DNS.Strategy != strategy || w.Header().Get("X-NodeCTL-IP-Mode") != resolved {
+					t.Fatal("IP mode not applied", mode, ip)
+				}
+			}
+		}
+	}
 	w := httptest.NewRecorder()
 	apiSubSingBox(w, httptest.NewRequest("GET", "https://panel.example/sub/singbox?token=secret&version=1.8&inspect=1", nil))
 	if !strings.Contains(w.Body.String(), "AnyTLS") {

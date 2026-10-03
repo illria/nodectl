@@ -10,14 +10,14 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.15
+  VERSION: v0.4.76-custom.16
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   go-test:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
-    name: Verify v15 subscriptions
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
+    name: Verify v16 subscriptions
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -43,11 +43,11 @@ jobs:
           NODECTL_UI_TEST_MODULES="$RUNNER_TEMP/sub-ui/node_modules" node scripts/check_subscription_ui.cjs
 
   singbox-check:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
     uses: ./.github/workflows/singbox-compatibility.yml
 
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
     needs: [go-test, singbox-check]
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
     needs: [go-test, singbox-check]
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -140,7 +140,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -168,21 +168,21 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.15
-            - 订阅分发中心新增“单节点池（无中转）”版本，Clash / sing-box / Base64 均可生成对应链接
-            - 对照用户的一 provider 参考配置：Clash 只订阅落地节点，保留软件/地区策略组，去掉中转策略与 dialer-proxy
-            - sing-box 单池节点不含中转 detour；继续适配 1.8～1.14，手机完整 VPN、桌面完整配置和 outbounds 片段
-            - Base64 单池版本只包含落地节点链接；该格式无法携带策略组、分流规则或 VPN 设置
-            - 保留 custom.14 的国内默认直连、加密 DNS 分流、低内存 SRS 及 Rule / Global / Direct 模式
-            - 原有订阅链接继续使用现有中转/落地结构；Agent 保持 v0.2.77
-            - 验证三类节点来源及禁用/屏蔽过滤、桌面/手机界面的链接/二维码/导入同步，并对八个真实内核测试两种配置
+            ### v0.4.76-custom.16
+            - 修复手机 Wi-Fi 无可用 IPv6 路由时，国内网站使用 IPv6 直连而报 no route to host 的问题
+            - 手机完整配置默认仅 IPv4 网站解析：不返回 AAAA 地址，并为 HTTPS/SVCB 记录提供空响应以避免旧内核使用 IPv6 地址提示
+            - 订阅分发中心增加网站地址解析选项：仅 IPv4（推荐）或 IPv4/IPv6 双栈；对应 ip=ipv4 / ip=dual
+            - 未指定 ip 的手机订阅更新后自动使用 IPv4；桌面完整配置的默认双栈解析保持不变
+            - 保留双栈 TUN 接管、国内直连/国外代理、加密 DNS 出口和缓存隔离，适用于中转及无中转两种版本
+            - outbounds 片段不增加 DNS 设置；IPv6 节点字面地址仍保留；Clash / Base64 和 Agent 无需变更
+            - 八个真实内核对两种订阅结构执行 IPv4/双栈 A、AAAA、HTTPS、SVCB 响应及路由/DNS 出口测试
 
-            更新面板后，进入“订阅分发中心 → 订阅版本 → 单节点池（无中转）”，重新复制或扫描链接导入。
-            单池版本仅使用路由类型为“落地”的自建、机场和自定义节点。手机 sing-box 请选“手机完整 VPN”。
+            更新面板后，在手机客户端更新完整订阅，停止并重新启动 VPN。必要时关闭后重新打开浏览器或相关应用，清理旧 IPv6 地址的连接缓存。
+            手机 sing-box 选择“手机完整 VPN”和“仅 IPv4”。需要访问仅有 IPv6 地址的网站时，请在网络支持 IPv6 的条件下改选双栈。
             CI 为 Linux loopback 路由/DNS 测试，不能代替 iOS 实机测试。
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.15`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.16`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -193,7 +193,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.15' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.16' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

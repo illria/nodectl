@@ -36,13 +36,18 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "mode 必须为 mobile、full 或 outbounds", 400)
 		return
 	}
+	ipMode, err := service.ParseSingBoxIPMode(r.URL.Query().Get("ip"), mode)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
 	var flag, name database.SysConfig
 	database.DB.Where("key = ?", "pref_use_emoji_flag").First(&flag)
 	database.DB.Where("key = ?", "sub_custom_name").First(&name)
 	if name.Value == "" {
 		name.Value = "NodeCTL"
 	}
-	data, warnings, err := service.GenerateSingBoxConfigWithTopology(getBaseURL(r), r.URL.Query().Get("token"), coreVersion, mode, flag.Value != "false", topology)
+	data, warnings, err := service.GenerateSingBoxConfigWithIPMode(getBaseURL(r), r.URL.Query().Get("token"), coreVersion, mode, flag.Value != "false", topology, ipMode)
 	if err != nil {
 		http.Error(w, err.Error(), 422)
 		return
@@ -51,6 +56,7 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("X-NodeCTL-Version", version.Version)
 	w.Header().Set("X-NodeCTL-Topology", string(topology))
+	w.Header().Set("X-NodeCTL-IP-Mode", string(ipMode))
 	w.Header().Set("X-NodeCTL-Skipped-Nodes", strconv.Itoa(len(warnings)))
 	w.Header().Set("profile-title", name.Value)
 	if info := service.GetSubscriptionUserinfo(); info != "" {

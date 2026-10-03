@@ -536,6 +536,7 @@
 
     let selectedSingBoxCore = '1.14';
     let selectedSingBoxMode = 'mobile';
+    let selectedSingBoxIPMode = 'ipv4';
     let singBoxInspectRequest = 0;
 
     // 预定义的链接与展示文案数据
@@ -548,7 +549,7 @@
         singbox: {
             title: "📦 sing-box 订阅",
             desc: "请选择客户端实际使用的<b>内核版本</b>。手机请选择完整 VPN 配置；桌面配置额外提供本地代理端口。配置片段不能单独启动 VPN。AnyTLS 需要 1.12+，SSR 不受支持。",
-            getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}${subTopologyQuery()}`
+            getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}&ip=${selectedSingBoxIPMode}${subTopologyQuery()}`
         },
         v2ray: {
             title: "🌐 V2Ray / 通用 Base64",
@@ -705,7 +706,12 @@
                 <option value="full" ${selectedSingBoxMode === 'full' ? 'selected' : ''}>桌面完整配置（TUN / 本地代理）</option>
                 <option value="outbounds" ${selectedSingBoxMode === 'outbounds' ? 'selected' : ''}>高级：配置片段（不能单独启动 VPN）</option>
             </select>
-            <div class="sub-right-desc">手机完整 VPN 包含双栈 TUN、DNS 和路由；规则采用紧凑 SRS 格式以降低内存。1.11.2 上游曾撤回，建议更新至 1.11.3+。</div>
+            <label class="sub-section-label" for="singBoxIPMode">网站地址解析</label>
+            <select id="singBoxIPMode" class="sub-name-input" onchange="selectedSingBoxIPMode=this.value; refreshSingBoxPanel()">
+                <option value="ipv4" ${selectedSingBoxIPMode === 'ipv4' ? 'selected' : ''}>仅 IPv4（推荐，适合 IPv6 不通的网络）</option>
+                <option value="dual" ${selectedSingBoxIPMode === 'dual' ? 'selected' : ''}>IPv4 / IPv6 双栈（网络需支持 IPv6）</option>
+            </select>
+            <div class="sub-right-desc">仅 IPv4 不返回 IPv6 网站地址，可避免没有 IPv6 路由时国内直连失败。TUN 仍接管双栈流量；配置片段不包含 DNS，此选项仅对完整配置生效。规则采用紧凑 SRS 格式以降低内存。1.11.2 建议更新至 1.11.3+。</div>
             <div class="sub-right-desc" id="singBoxCompatibility" role="status" style="margin-top:10px"></div>
         ` : '';
 
