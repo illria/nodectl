@@ -85,6 +85,12 @@ func TestSingBoxIPModes(t *testing.T) {
 					if config["dns"].(map[string]interface{})["strategy"] != strategy {
 						t.Fatal("wrong DNS address family", mode, requested)
 					}
+					if minor >= 12 && resolved == SingBoxIPv4Only {
+						resolver := config["route"].(map[string]interface{})["default_domain_resolver"].(map[string]interface{})
+						if resolver["server"] != "dns-bootstrap" || resolver["strategy"] != "ipv4_only" {
+							t.Fatal("internal direct resolution still allows IPv6")
+						}
+					}
 					if !strings.Contains(string(data), "fdfe:dcba:9876::1/126") {
 						t.Fatal("IPv6 TUN capture removed")
 					}

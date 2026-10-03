@@ -15,6 +15,7 @@ on:
       - fix/singbox-cn-direct-v14
       - feat/single-provider-v15
       - fix/singbox-ipv4-v16
+      - fix/singbox-ipv4-v16-resolver
 
 permissions:
   contents: read

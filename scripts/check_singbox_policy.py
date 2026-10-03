@@ -265,7 +265,7 @@ try:
                     for kind in [28, 64, 65]:
                         assert dns_query(port, host, kind) == expected6, (host, kind, 'wrong AAAA/SVCB/HTTPS address policy')
                     if expected6 is None:
-                        assert family_queries() == queries_before, (host, 'IPv4-only mode sent an upstream AAAA/SVCB/HTTPS query')
+                        assert family_queries() == queries_before, (host, 'IPv4-only mode sent an upstream AAAA/SVCB/HTTPS query', direct.questions, remote.questions)
                     assert expected != direct.answer or host not in remote.queries, (host, 'domestic DNS crossed proxy')
                     before = len([c for c in proxy.connections if c[1] == website.server_port])
                     visit(port, host, website.server_port)

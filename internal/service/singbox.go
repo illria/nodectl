@@ -262,6 +262,15 @@ func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNo
 		data, e := json.MarshalIndent(sbObject{"outbounds": out}, "", "  ")
 		return data, warnings, e
 	}
+	if minor >= 12 && ipMode == SingBoxIPv4Only {
+		// Native internal lookups can override the DNS default strategy. Match
+		// node bootstrap resolution to the selected family explicitly.
+		for _, ob := range out {
+			if _, ok := ob["domain_resolver"]; ok {
+				ob["domain_resolver"] = sbObject{"server": "dns-bootstrap", "strategy": "ipv4_only"}
+			}
+		}
+	}
 	if minor < 11 {
 		out = append(out, sbObject{"type": "dns", "tag": "dns-out"}, sbObject{"type": "block", "tag": "block"})
 	}
@@ -365,6 +374,9 @@ func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNo
 	if minor >= 12 {
 		dns["servers"] = []sbObject{{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "总模式"}, {"type": "https", "tag": "dns-bootstrap", "server": "223.5.5.5"}}
 		route["default_domain_resolver"] = "dns-bootstrap"
+		if ipMode == SingBoxIPv4Only {
+			route["default_domain_resolver"] = sbObject{"server": "dns-bootstrap", "strategy": "ipv4_only"}
+		}
 	} else {
 		dns["servers"] = []sbObject{{"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "detour": "总模式"}, {"tag": "dns-bootstrap", "address": "https://223.5.5.5/dns-query", "detour": bootstrapDetour}}
 		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
@@ -373,7 +385,7 @@ func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNo
 	if ipMode == SingBoxIPv4Only {
 		// Older cores do not filter ipv6hint from HTTPS/SVCB responses. Clients
 		// can use those hints even without AAAA answers. Fall back to A lookups.
-		hintRule := sbObject{"query_type": []string{"HTTPS", "SVCB"}}
+		hintRule := sbObject{"query_type": []string{"AAAA", "HTTPS", "SVCB"}}
 		if minor >= 12 {
 			hintRule["action"], hintRule["rcode"] = "predefined", "NOERROR"
 		} else {
