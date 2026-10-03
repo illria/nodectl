@@ -337,6 +337,8 @@ func Start(tmplFS embed.FS) {
 
 	// 订阅接口
 	mux.HandleFunc("/sub/clash", withSecure(apiSubClash))
+	mux.HandleFunc("/sub/singbox", withSecure(apiSubSingBox))
+	mux.HandleFunc("/sub/singbox/rules/", withSecure(apiSubSingBoxRules))
 	mux.HandleFunc("/sub/v2ray", withSecure(apiSubV2ray))
 	mux.HandleFunc("/sub/raw/1", withSecure(apiSubRaw))
 	mux.HandleFunc("/sub/raw/2", withSecure(apiSubRaw))
