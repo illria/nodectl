@@ -256,12 +256,16 @@ try:
 
                 def check(host, expected, proxied):
                     assert dns_query(port, host) == expected, (host, 'wrong DNS server or cross-mode cache')
-                    queries_before = len(direct.questions) + len(remote.questions)
+                    # 1.14 may refresh A records asynchronously. Only forbidden
+                    # IPv6/hint query types count toward this family assertion.
+                    def family_queries():
+                        return sum(kind in (28, 64, 65) for _, kind in direct.questions + remote.questions)
+                    queries_before = family_queries()
                     expected6 = (remote if proxied else direct).answer6 if config['dns']['strategy'] != 'ipv4_only' else None
                     for kind in [28, 64, 65]:
                         assert dns_query(port, host, kind) == expected6, (host, kind, 'wrong AAAA/SVCB/HTTPS address policy')
                     if expected6 is None:
-                        assert len(direct.questions) + len(remote.questions) == queries_before, (host, 'IPv4-only mode sent an upstream AAAA query')
+                        assert family_queries() == queries_before, (host, 'IPv4-only mode sent an upstream AAAA/SVCB/HTTPS query')
                     assert expected != direct.answer or host not in remote.queries, (host, 'domestic DNS crossed proxy')
                     before = len([c for c in proxy.connections if c[1] == website.server_port])
                     visit(port, host, website.server_port)
