@@ -12,6 +12,7 @@ from pathlib import Path
 import socket
 import subprocess
 import tempfile
+import urllib.request
 import threading
 import time
 
@@ -47,7 +48,11 @@ with tempfile.TemporaryDirectory() as directory:
         path = 'cn.srs' if args.large_rules and rule_set['tag'] == 'CN_域' else 'rules.srs'
         rule_set.update(type='remote', format='binary', url=f'http://127.0.0.1:{server.server_port}/{path}', download_detour='🇨🇳 大陆')
     # Disable platform-specific cache files in this isolated test directory.
-    config.pop('experimental', None)
+    with socket.socket() as control:
+        control.bind(('127.0.0.1', 0))
+        control_port = control.getsockname()[1]
+    # A temporary REST listener lets the harness exercise the same native mode manager.
+    config['experimental'] = {'clash_api': {'external_controller': f'127.0.0.1:{control_port}', 'default_mode': 'Rule'}}
     profile = root / 'profile.json'
     profile.write_text(json.dumps(config), encoding='utf-8')
     log_path = root / 'service.log'
@@ -73,6 +78,15 @@ with tempfile.TemporaryDirectory() as directory:
                     with socket.create_connection(('127.0.0.1', port), timeout=1) as connection:
                         connection.sendall(b'\x05\x01\x00')
                         assert connection.recv(2) == b'\x05\x00', 'Mixed listener cannot accept proxy connections'
+                    for mode in ['Rule', 'Global', 'Direct', 'Rule']:
+                        request = urllib.request.Request(f'http://127.0.0.1:{control_port}/configs', data=json.dumps({'mode': mode}).encode(), headers={'Content-Type': 'application/json'}, method='PATCH')
+                        with urllib.request.urlopen(request, timeout=2) as response:
+                            assert response.status == 204, 'Mode switch rejected'
+                        with urllib.request.urlopen(f'http://127.0.0.1:{control_port}/configs', timeout=2) as response:
+                            status = json.load(response)
+                        assert status['mode'].lower() == mode.lower(), 'Mode did not change'
+                        if 'mode-list' in status:
+                            assert set(['Rule', 'Global', 'Direct']).issubset(status['mode-list']), 'Client mode list incomplete'
                     time.sleep(0.3)
                     break
                 time.sleep(0.02)
@@ -80,7 +94,7 @@ with tempfile.TemporaryDirectory() as directory:
                 raise RuntimeError('Startup timed out:\n' + log_path.read_text())
             if process.poll() is not None:
                 raise RuntimeError('Service exited after startup:\n' + log_path.read_text())
-            print(f'Remote SRS download, startup, and proxy listener passed; Linux RSS peak {peak_kb} KiB (not an iOS memory measurement)')
+            print(f'Remote SRS, startup, proxy listener and Rule/Global/Direct switching passed; Linux RSS peak {peak_kb} KiB (not an iOS memory measurement)')
         finally:
             process.terminate()
             try:

@@ -133,6 +133,14 @@ func TestSingBoxCompatibility(t *testing.T) {
 			if len(inputs) != 1 || inputs[0].(map[string]interface{})["type"] != "tun" {
 				t.Fatal("mobile lacks VPN TUN")
 			}
+			for _, mode := range []string{"Rule", "Global", "Direct"} {
+				if !strings.Contains(string(mobile), `"clash_mode": "`+mode+`"`) {
+					t.Fatal("missing native client mode", mode)
+				}
+			}
+			if mobileConfig["experimental"].(map[string]interface{})["clash_api"].(map[string]interface{})["default_mode"] != "Rule" {
+				t.Fatal("missing default Rule mode")
+			}
 			if strings.Contains(string(mobile), "external_controller") {
 				t.Fatal("mobile opens desktop control port")
 			}

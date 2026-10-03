@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.12`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前准备版本：**`v0.4.76-custom.13`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -139,7 +139,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.12`；当前稳定版为 `v0.4.76-custom.12`。
+> 当前准备版本为 `v0.4.76-custom.13`；当前稳定版为 `v0.4.76-custom.13`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -148,7 +148,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.12
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.13
 ```
 
 启动：
@@ -163,7 +163,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.12
+  ghcr.io/illria/nodectl:v0.4.76-custom.13
 ```
 
 访问：
@@ -191,7 +191,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.12
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.13
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -275,7 +275,7 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 
 ### sing-box 订阅
 
-订阅分发中心新增 **sing-box** 卡片，默认“手机完整 VPN”，可选择实际内核的 1.8～1.14 系列以及配置形式。`custom.12` 修复大规则表的高内存问题。
+订阅分发中心新增 **sing-box** 卡片，默认“手机完整 VPN”，可选择实际内核的 1.8～1.14 系列以及配置形式。`custom.12` 修复大规则表的高内存问题，`custom.13` 补齐手机客户端 Rule / Global / Direct 模式。
 
 - **手机完整 VPN（默认）**：包含双栈 TUN、DNS 接管、中转、落地、地区测速和分流；需要客户端授权 VPN。订阅参数为 `mode=mobile`，不开放桌面代理/控制端口。
 - **桌面完整配置**：`mode=full`，额外监听混合代理 `127.0.0.1:7890` 和策略控制接口 `127.0.0.1:9090`。
@@ -288,6 +288,8 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 
 真实核心验证：**1.8.14、1.9.7、1.10.7、1.11.3、1.11.15、1.12.25、1.13.21、1.14.2**，建议使用所属系列的最新稳定补丁版。CI 对八个版本执行配置检查，并实际下载 SRS 规则、启动服务及验证代理监听，包含 11 万条国内域名。Linux 测试替换 TUN 为本地测试监听，不能代替 iOS 实机测试。上游曾因发布错误用 1.11.3 替换 1.11.2，建议使用 1.11.3+。
 
+模式切换：**Rule** 保持软件/自定义/国内分流；**Global** 使用“总模式”出口；**Direct** 全部直连并使用国内加密 DNS。Direct 模式的 DNS 有意直连。手机客户端通过内部模式管理显示这三个选项，不开放桌面控制端口。CI 会实际切换并检查各模式。
+
 ### Docker 升级
 
 `custom.12` 修复 sing-box 规则内存并默认手机完整 VPN；`custom.11` 新增多版本 sing-box 订阅，同时保留 `custom.10` 的 Clash 行为。Clash 以用户验证正常的 `NodeCTL-AB-G-custom8-IP-rules-no-resolve.yaml` 为参考，保留客户端中转、策略组与规则顺序，并补齐自定义直连、WebRTC、外部 classical 模块和自定义分流规则集的 `no-resolve`。参考配置以脱敏测试数据保存，生成结果会逐区块对照验证。
@@ -299,7 +301,7 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.12 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.13 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -309,14 +311,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.12
+  ghcr.io/illria/nodectl:v0.4.76-custom.13
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.12` |
+| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.13` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |
