@@ -112,7 +112,7 @@ def unused_port():
         return connection.getsockname()[1]
 
 
-def socks_connection(port, host, destination_port, payload):
+def socks_connection(port, host, destination_port, payload, pipeline=True):
     connection = socket.create_connection(('127.0.0.1', port), timeout=5)
     try:
         connection.sendall(b'\x05\x01\x00')
@@ -122,7 +122,7 @@ def socks_connection(port, host, destination_port, payload):
         except OSError:
             address = b'\x03' + bytes([len(host)]) + host.encode()
         # Pipeline the payload so the generated sniff action can see it.
-        connection.sendall(b'\x05\x01\x00' + address + struct.pack('!H', destination_port) + payload)
+        connection.sendall(b'\x05\x01\x00' + address + struct.pack('!H', destination_port) + (payload if pipeline else b''))
         reply = read_exact(connection, 4)
         assert reply[:2] == b'\x05\x00', (host, reply)
         if reply[3] == 1:
@@ -131,6 +131,8 @@ def socks_connection(port, host, destination_port, payload):
             read_exact(connection, 18)
         else:
             read_exact(connection, read_exact(connection, 1)[0] + 2)
+        if not pipeline:
+            connection.sendall(payload)
         return connection
     except BaseException:
         connection.close()
@@ -140,7 +142,7 @@ def socks_connection(port, host, destination_port, payload):
 def dns_query(port, host):
     name = b''.join(bytes([len(label)]) + label.encode() for label in host.split('.')) + b'\x00'
     query = struct.pack('!HHHHHH', 42, 0x0100, 1, 0, 0, 0) + name + struct.pack('!HH', 1, 1)
-    with socks_connection(port, '8.8.8.8', 53, struct.pack('!H', len(query)) + query) as connection:
+    with socks_connection(port, '8.8.8.8', 53, struct.pack('!H', len(query)) + query, pipeline=False) as connection:
         response = read_exact(connection, struct.unpack('!H', read_exact(connection, 2))[0])
     assert response[:2] == query[:2] and response[3] & 15 == 0 and struct.unpack('!H', response[6:8])[0] == 1, response
     return socket.inet_ntoa(response[-4:])
