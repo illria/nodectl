@@ -10,14 +10,14 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.11
+  VERSION: v0.4.76-custom.12
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   go-test:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
-    name: Verify v11 subscriptions
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
+    name: Verify v12 subscriptions
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -34,11 +34,11 @@ jobs:
         run: go test ./...
 
   singbox-check:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
     uses: ./.github/workflows/singbox-compatibility.yml
 
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
     needs: [go-test, singbox-check]
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
     needs: [go-test, singbox-check]
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -159,20 +159,19 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.11
-            - 订阅分发中心新增 sing-box 原生 JSON，支持 1.8～1.14 内核版本选择
-            - 提供完整配置和仅节点/策略组片段，保留中转链路、地区测速与现有分流
-            - 按版本适配 DNS、TUN、拒绝动作及 AnyTLS，并提示不兼容节点
-            - 内置和自定义规则转换为跨版本 source-v1 规则集，IP 匹配不触发额外 DNS 解析
-            - 七个真实 sing-box 核心执行配置校验，完整 Go 测试与 Clash 参考回归验证
-            - Agent 保持 v0.2.77，本版无需升级 Agent
+            ### v0.4.76-custom.12
+            - 修复大规则表逐条生成独立匹配器导致的高内存：国内域名表旧版约 434 MB 峰值
+            - 规则改为紧凑分组与 SRS v1 二进制，兼容 1.8～1.14；保留旧 source 接口
+            - 默认手机完整 VPN 配置，保留双栈 TUN/DNS/路由，移除桌面代理和控制端口
+            - 配置片段明确提示不能单独接管手机流量
+            - 新增八个官方核心的真实远程规则下载、服务启动及代理监听测试，包含 11 万条真实国内域名表
+            - 1.11.2 已被上游 1.11.3 替换，建议使用 1.11.3+；Agent 无需升级
 
-            升级面板后，打开订阅分发中心选择 sing-box 和客户端实际内核版本。
-            完整配置需要客户端授权 TUN；仅节点片段需要客户端合并并管理 DNS。
-            AnyTLS 需要 1.12+；SSR 不受支持，界面提示跳过原因。实际 DNS 出口需客户端复测。
+            请更新面板，在分发中心重新复制“手机完整 VPN”订阅并更新/重新导入客户端。
+            CI 在 Linux 替换 TUN 为测试监听验证真实核心启动，不是 iOS 实机验证；手机 VPN 与 DNS 出口需客户端复测。
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.11`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.12`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -183,7 +182,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.11' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.12' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

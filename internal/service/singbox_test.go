@@ -99,8 +99,8 @@ func TestSingBoxCompatibility(t *testing.T) {
 					}
 					set["tag"] = tag
 					set["type"] = "local"
-					set["format"] = "source"
-					set["path"] = filepath.Join(dir, "rules.json")
+					set["format"] = "binary"
+					set["path"] = filepath.Join(dir, "rules.srs")
 				}
 				source, e := convertSingBoxRuleSource([]byte("DOMAIN-SUFFIX,example.test\nIP-CIDR,203.0.113.0/24,no-resolve\nDST-PORT,3478"), "classical")
 				if e != nil {
@@ -109,8 +109,35 @@ func TestSingBoxCompatibility(t *testing.T) {
 				if e = os.WriteFile(filepath.Join(dir, "rules.json"), source, 0600); e != nil {
 					t.Fatal(e)
 				}
+				compiled, e := CompileSingBoxRuleSet(source)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if e = os.WriteFile(filepath.Join(dir, "rules.srs"), compiled, 0600); e != nil {
+					t.Fatal(e)
+				}
 				data, _ = json.MarshalIndent(config, "", "  ")
 				if e = os.WriteFile(filepath.Join(dir, fmt.Sprintf("1.%d.json", minor)), data, 0600); e != nil {
+					t.Fatal(e)
+				}
+			}
+			mobile, _, e := buildSingBoxConfig(p, pools, "https://panel.example", "secret", minor, "mobile")
+			if e != nil {
+				t.Fatal(e)
+			}
+			var mobileConfig map[string]interface{}
+			if e = json.Unmarshal(mobile, &mobileConfig); e != nil {
+				t.Fatal(e)
+			}
+			inputs := mobileConfig["inbounds"].([]interface{})
+			if len(inputs) != 1 || inputs[0].(map[string]interface{})["type"] != "tun" {
+				t.Fatal("mobile lacks VPN TUN")
+			}
+			if strings.Contains(string(mobile), "external_controller") {
+				t.Fatal("mobile opens desktop control port")
+			}
+			if dir := os.Getenv("NODECTL_SINGBOX_FIXTURES"); dir != "" {
+				if e = os.WriteFile(filepath.Join(dir, fmt.Sprintf("1.%d-mobile.json", minor)), mobile, 0600); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -172,7 +199,74 @@ func TestSingBoxUpstreamRuleSamples(t *testing.T) {
 		if e != nil {
 			t.Fatalf("%s: %v", name, e)
 		}
+		compiled, e := CompileSingBoxRuleSet(result)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = os.WriteFile(filepath.Join(dir, name+".srs"), compiled, 0600); e != nil {
+			t.Fatal(e)
+		}
 		if e = os.WriteFile(filepath.Join(dir, name+".json"), result, 0600); e != nil {
+			t.Fatal(e)
+		}
+	}
+}
+
+func TestSingBoxCompactionPreservesConditions(t *testing.T) {
+	source, e := convertSingBoxRuleSource([]byte("DOMAIN,a.test\nDOMAIN,b.test\nIP-CIDR,203.0.113.0/24\nDST-PORT,3478"), "classical")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var doc struct {
+		Rules []sbObject `json:"rules"`
+	}
+	if e = json.Unmarshal(source, &doc); e != nil {
+		t.Fatal(e)
+	}
+	if len(doc.Rules) != 3 {
+		t.Fatal("different match classes merged into AND or domains not compacted")
+	}
+	binary, e := CompileSingBoxRuleSet(source)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if string(binary[:4]) != "SRS\x01" {
+		t.Fatal("binary format newer than oldest supported core")
+	}
+	if _, e = CompileSingBoxRuleSet([]byte(`{"version":1,"rules":[{"unsupported":true}]}`)); e == nil {
+		t.Fatal("unknown field silently lost")
+	}
+}
+
+func TestSingBoxLargeRuleFixture(t *testing.T) {
+	path := os.Getenv("NODECTL_SINGBOX_LARGE_SOURCE")
+	if path == "" {
+		t.Skip("no large upstream source")
+	}
+	data, e := os.ReadFile(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	source, e := convertSingBoxRuleSource(data, "domain")
+	if e != nil {
+		t.Fatal(e)
+	}
+	var doc struct {
+		Rules []sbObject `json:"rules"`
+	}
+	if e = json.Unmarshal(source, &doc); e != nil {
+		t.Fatal(e)
+	}
+	if len(doc.Rules) > 3 {
+		t.Fatal("large domains generated separate per-domain matchers")
+	}
+	compiled, e := CompileSingBoxRuleSet(source)
+	if e != nil {
+		t.Fatal(e)
+	}
+	dir := os.Getenv("NODECTL_SINGBOX_FIXTURES")
+	if dir != "" {
+		if e = os.WriteFile(filepath.Join(dir, "cn.srs"), compiled, 0600); e != nil {
 			t.Fatal(e)
 		}
 	}

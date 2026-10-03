@@ -10,12 +10,13 @@ on:
       - fix/minimal-profile-v8
       - fix/reference-dns-v10
       - feat/singbox-subscriptions-v11
+      - fix/singbox-ios-v12
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.11
+  VERSION: v0.4.76-custom.12
   AGENT_VERSION: v0.2.77
 
 concurrency:

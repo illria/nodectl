@@ -527,7 +527,7 @@
     let currentFormatKey = null;
 
     let selectedSingBoxCore = '1.14';
-    let selectedSingBoxMode = 'full';
+    let selectedSingBoxMode = 'mobile';
     let singBoxInspectRequest = 0;
 
     // 预定义的链接与展示文案数据
@@ -539,7 +539,7 @@
         },
         singbox: {
             title: "📦 sing-box 订阅",
-            desc: "请选择客户端实际使用的<b>内核版本</b>。完整配置包含 DNS、TUN、分流和中转；仅节点用于支持合并配置的客户端。AnyTLS 需要 1.12+，SSR 不受支持。",
+            desc: "请选择客户端实际使用的<b>内核版本</b>。手机请选择完整 VPN 配置；桌面配置额外提供本地代理端口。配置片段不能单独启动 VPN。AnyTLS 需要 1.12+，SSR 不受支持。",
             getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}`
         },
         v2ray: {
@@ -650,6 +650,8 @@
         const link = data.getLink();
         const contentDiv = document.getElementById('subRightContent');
         const subName = document.getElementById('inputSubName').value.trim() || 'NodeCTL';
+        const fragmentWarning = formatKey === 'singbox' && selectedSingBoxMode === 'outbounds'
+            ? '<div role="alert" class="sub-right-desc" style="color:#b42318;margin-top:10px">此配置只有节点和策略组，没有 TUN、DNS、路由。直接导入手机无法接管流量，请使用“手机完整 VPN”。</div>' : '';
 
         let importBtnHtml = '';
         // 默认不加 has-import 类，这样只有复制按钮时会独占一行撑满
@@ -676,10 +678,11 @@
             </select>
             <label class="sub-section-label" for="singBoxMode">配置形式</label>
             <select id="singBoxMode" class="sub-name-input" onchange="selectedSingBoxMode=this.value; refreshSingBoxPanel()">
-                <option value="full" ${selectedSingBoxMode === 'full' ? 'selected' : ''}>完整配置（DNS / TUN / 分流）</option>
-                <option value="outbounds" ${selectedSingBoxMode === 'outbounds' ? 'selected' : ''}>仅节点和策略组（需客户端合并）</option>
+                <option value="mobile" ${selectedSingBoxMode === 'mobile' ? 'selected' : ''}>手机完整 VPN（推荐）</option>
+                <option value="full" ${selectedSingBoxMode === 'full' ? 'selected' : ''}>桌面完整配置（TUN / 本地代理）</option>
+                <option value="outbounds" ${selectedSingBoxMode === 'outbounds' ? 'selected' : ''}>高级：配置片段（不能单独启动 VPN）</option>
             </select>
-            <div class="sub-right-desc">完整配置开启双栈 TUN，需要客户端授权；用户域名通过代理 DoH 解析，节点服务器域名单独解析。仅节点不管理客户端 DNS。订阅更新由客户端执行。拒绝规则仍生效，策略选择列表不含手动拒绝选项。</div>
+            <div class="sub-right-desc">手机完整 VPN 包含双栈 TUN、DNS 和路由；规则采用紧凑 SRS 格式以降低内存。1.11.2 上游曾撤回，建议更新至 1.11.3+。</div>
             <div class="sub-right-desc" id="singBoxCompatibility" role="status" style="margin-top:10px"></div>
         ` : '';
 
@@ -690,6 +693,7 @@
             </div>
             
             ${singBoxControls}
+            ${fragmentWarning}
             <div class="qr-wrapper">
                 <div class="qr-box" id="qrCodeContainer"></div>
             </div>

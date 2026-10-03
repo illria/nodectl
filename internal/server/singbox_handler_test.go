@@ -86,6 +86,11 @@ func TestSingBoxSubscriptionAndRules(t *testing.T) {
 		}
 	}
 	w = httptest.NewRecorder()
+	apiSubSingBoxRules(w, httptest.NewRequest("GET", "https://panel.example/sub/singbox/rules/我的直连规则?token=secret&format=binary", nil))
+	if w.Code != 200 || !strings.HasPrefix(w.Body.String(), "SRS\x01") {
+		t.Fatal("binary rule endpoint failed", w.Code)
+	}
+	w = httptest.NewRecorder()
 	apiSubSingBoxRules(w, httptest.NewRequest("GET", "https://panel.example/sub/singbox/rules/unknown?token=secret", nil))
 	if w.Code == 200 {
 		t.Fatal("unknown ruleset accepted")

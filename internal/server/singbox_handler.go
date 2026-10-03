@@ -27,8 +27,8 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if mode != "" && mode != "full" && mode != "outbounds" {
-		http.Error(w, "mode 必须为 full 或 outbounds", 400)
+	if mode != "" && mode != "mobile" && mode != "full" && mode != "outbounds" {
+		http.Error(w, "mode 必须为 mobile、full 或 outbounds", 400)
 		return
 	}
 	var flag, name database.SysConfig
@@ -73,7 +73,21 @@ func apiSubSingBoxRules(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 422)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	format := r.URL.Query().Get("format")
+	if format != "" && format != "source" && format != "binary" {
+		http.Error(w, "format 必须为 source 或 binary", 400)
+		return
+	}
+	if format == "binary" {
+		data, err = service.CompileSingBoxRuleSet(data)
+		if err != nil {
+			http.Error(w, "规则集编译失败", 422)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+	} else {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write(data)
 }
