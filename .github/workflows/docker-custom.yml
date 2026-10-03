@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   build-linux-binaries:
+    # Release commits are tested, built and published by publish-custom-release.yml.
+    if: "${{ !startsWith(github.event.head_commit.message, 'release: publish ') }}"
     name: Build Linux ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -38,7 +40,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=v0.4.76-custom.9'" \
+          go build -trimpath -ldflags="-s -w -X 'nodectl/internal/version.Version=v0.4.76-custom.10'" \
             -o "bin/nodectl-linux-${GOARCH}" ./main.go
 
       - name: Upload binary

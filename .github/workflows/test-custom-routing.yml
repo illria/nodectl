@@ -8,12 +8,13 @@ on:
       - fix/dns-enforcement-v6
       - fix/client-managed-dns-v7
       - fix/minimal-profile-v8
+      - fix/reference-dns-v10
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.8
+  VERSION: v0.4.76-custom.10
   AGENT_VERSION: v0.2.77
 
 concurrency:

@@ -11,6 +11,7 @@ import (
 	"nodectl/internal/database"
 	"nodectl/internal/logger"
 	"nodectl/internal/service"
+	"nodectl/internal/version"
 )
 
 // ------------------- [订阅与分流规则 API] -------------------
@@ -68,6 +69,8 @@ func apiSubClash(w http.ResponseWriter, r *http.Request) {
 
 	logger.Log.Info("成功下发 Clash 订阅模板", "ip", clientIP, "path", reqPath)
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("X-NodeCTL-Version", version.Version)
 	w.Header().Set("profile-title", subName)
 
 	if userinfo := service.GetSubscriptionUserinfo(); userinfo != "" {
