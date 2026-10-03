@@ -473,6 +473,16 @@
                     </div>
                 </div>
 
+                <div class="format-wrapper" id="wrap_singbox">
+                    <div class="sub-format-card" onclick="selectSubFormat('singbox', this)">
+                        <div class="sub-format-info">
+                            <div class="sub-format-name">📦 sing-box</div>
+                            <div class="sub-format-desc">原生 JSON · 支持 1.8～1.14 内核</div>
+                        </div>
+                        <div class="sub-expand-indicator">›</div>
+                    </div>
+                </div>
+
                 <div class="format-wrapper" id="wrap_v2ray">
                     <div class="sub-format-card" onclick="selectSubFormat('v2ray', this)">
                         <div class="sub-format-info">
@@ -516,6 +526,10 @@
     let currentToken = '';
     let currentFormatKey = null;
 
+    let selectedSingBoxCore = '1.14';
+    let selectedSingBoxMode = 'full';
+    let singBoxInspectRequest = 0;
+
     // 预定义的链接与展示文案数据
     const subFormatData = {
         clash: {
@@ -523,12 +537,39 @@
             desc: "推荐使用 <b>Clash Verge Rev</b> 或 <b>OpenClash</b>。<br>手机端可直接扫描下方二维码添加。",
             getLink: () => `${currentBaseUrl}/sub/clash?token=${currentToken}`
         },
+        singbox: {
+            title: "📦 sing-box 订阅",
+            desc: "请选择客户端实际使用的<b>内核版本</b>。完整配置包含 DNS、TUN、分流和中转；仅节点用于支持合并配置的客户端。AnyTLS 需要 1.12+，SSR 不受支持。",
+            getLink: () => `${currentBaseUrl}/sub/singbox?token=${encodeURIComponent(currentToken)}&version=${selectedSingBoxCore}&mode=${selectedSingBoxMode}`
+        },
         v2ray: {
             title: "🌐 V2Ray / 通用 Base64",
             desc: "适用于 <b>v2rayN</b>、<b>v2rayNG</b>、<b>Shadowrocket</b> 等绝大多数基础代理工具。",
             getLink: () => `${currentBaseUrl}/sub/v2ray?token=${currentToken}`
         }
     };
+
+    function refreshSingBoxPanel() {
+        renderRightPanel('singbox');
+        resizeSubLinkTextarea();
+    }
+
+    async function inspectSingBoxCompatibility() {
+        const request = ++singBoxInspectRequest;
+        const status = document.getElementById('singBoxCompatibility');
+        if (!status) return;
+        status.textContent = '正在检查节点兼容性…';
+        try {
+            const response = await fetch(subFormatData.singbox.getLink() + '&inspect=1', {cache: 'no-store'});
+            const text = await response.text();
+            if (request !== singBoxInspectRequest || !status.isConnected) return;
+            if (!response.ok) {status.textContent = '无法生成：' + text; return;}
+            const skipped = JSON.parse(text).skipped_nodes || [];
+            status.textContent = skipped.length ? `已跳过 ${skipped.length} 个不兼容节点：` + skipped.join('；') : '节点兼容性检查通过';
+        } catch (error) {
+            if (request === singBoxInspectRequest && status.isConnected) status.textContent = '兼容性检查失败，请检查连接后重试。';
+        }
+    }
 
     // 辅助函数：根据文字自适应 Textarea 的高度
     function resizeSubLinkTextarea() {
@@ -605,6 +646,7 @@
     // 核心渲染逻辑：生成一键导入按钮和二维码
     function renderRightPanel(formatKey) {
         const data = subFormatData[formatKey];
+        if (formatKey === 'singbox') setTimeout(inspectSingBoxCompatibility, 0);
         const link = data.getLink();
         const contentDiv = document.getElementById('subRightContent');
         const subName = document.getElementById('inputSubName').value.trim() || 'NodeCTL';
@@ -627,12 +669,27 @@
             // V2Ray 下什么都不做，importBtnHtml 保持为空，界面上只会显示一个宽的复制按钮
         }
 
+        const singBoxControls = formatKey === 'singbox' ? `
+            <label class="sub-section-label" for="singBoxVersion">内核版本</label>
+            <select id="singBoxVersion" class="sub-name-input" onchange="selectedSingBoxCore=this.value; refreshSingBoxPanel()">
+                ${['1.14', '1.13', '1.12', '1.11', '1.10', '1.9', '1.8'].map(v => `<option value="${v}" ${v === selectedSingBoxCore ? 'selected' : ''}>sing-box ${v}.x</option>`).join('')}
+            </select>
+            <label class="sub-section-label" for="singBoxMode">配置形式</label>
+            <select id="singBoxMode" class="sub-name-input" onchange="selectedSingBoxMode=this.value; refreshSingBoxPanel()">
+                <option value="full" ${selectedSingBoxMode === 'full' ? 'selected' : ''}>完整配置（DNS / TUN / 分流）</option>
+                <option value="outbounds" ${selectedSingBoxMode === 'outbounds' ? 'selected' : ''}>仅节点和策略组（需客户端合并）</option>
+            </select>
+            <div class="sub-right-desc">完整配置开启双栈 TUN，需要客户端授权；用户域名通过代理 DoH 解析，节点服务器域名单独解析。仅节点不管理客户端 DNS。订阅更新由客户端执行。拒绝规则仍生效，策略选择列表不含手动拒绝选项。</div>
+            <div class="sub-right-desc" id="singBoxCompatibility" role="status" style="margin-top:10px"></div>
+        ` : '';
+
         contentDiv.innerHTML = `
             <div class="sub-right-header">
                 <div class="sub-right-title">${data.title}</div>
                 <div class="sub-right-desc">${data.desc}</div>
             </div>
             
+            ${singBoxControls}
             <div class="qr-wrapper">
                 <div class="qr-box" id="qrCodeContainer"></div>
             </div>

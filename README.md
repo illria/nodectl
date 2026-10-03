@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.10`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前准备版本：**`v0.4.76-custom.11`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -139,7 +139,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.10`；当前稳定版为 `v0.4.76-custom.10`。
+> 当前准备版本为 `v0.4.76-custom.11`；当前稳定版为 `v0.4.76-custom.11`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -148,7 +148,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.10
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.11
 ```
 
 启动：
@@ -163,7 +163,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.10
+  ghcr.io/illria/nodectl:v0.4.76-custom.11
 ```
 
 访问：
@@ -191,7 +191,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.10
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.11
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -273,9 +273,23 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 
 <https://github.com/illria/nodectl/releases/latest>
 
+### sing-box 订阅
+
+订阅分发中心新增 **sing-box** 卡片，可选择实际内核的 1.8～1.14 系列以及配置形式。
+
+- **完整配置**：原生 JSON，包含双栈 TUN、DNS 接管、中转策略、落地节点、地区测速及现有软件/自定义分流。需要客户端授权 TUN；混合代理监听 `127.0.0.1:7890`，策略控制接口监听 `127.0.0.1:9090`。
+- **仅节点和策略组**：提供 `outbounds` 配置片段，需要客户端合并，并由客户端管理 DNS、入站和路由。不会自动更新单个 provider，需客户端定期更新订阅。
+- 请求地址：`/sub/singbox?token=订阅令牌&version=1.14&mode=full`。可填写补丁版本，如 `1.12.25`；界面选择系列即可。未来版本和测试版会拒绝生成，以免输出未验证格式。
+- AnyTLS 需要 1.12+；SSR 不受支持。界面显示跳过的节点及原因，响应头 `X-NodeCTL-Skipped-Nodes` 给出数量。无兼容落地节点时明确报错，避免自动直连。
+- 内置 MRS 使用上游同源文本镜像转换为原生 source-v1 规则集，支持所有目标版本；自定义规则支持常用域名、IP、端口、进程及 NETWORK 条件。不支持的复杂条件会明确报错。自定义 MRS 请改用文本/YAML 源，规则源仅允许公网 HTTP(S)。
+- 完整配置的用户 DNS 经“总模式”指定的出口访问 DoH，节点服务器域名单独使用直连 DoH 引导解析。未配置系统 DNS 回退，IP 分流不添加 `resolve` 动作；通过“总模式”选择直连时 DNS 也按此出口直连。实际 DNS 出口需要客户端运行后复测。
+- 为兼容新版移除的 `block` 出站，策略选择列表不包含手动“拒绝连接”选项；WebRTC、广告等拒绝路由仍生效。地区组没有兼容节点时自动隐藏。
+
+真实核心验证：**1.8.14、1.9.7、1.10.7、1.11.15、1.12.25、1.13.21、1.14.2**，建议使用所属系列的最新稳定补丁版。CI 对七个版本执行 `sing-box check`，检查多协议、传输、DNS、TUN 和路由配置。
+
 ### Docker 升级
 
-`custom.10` 以用户验证正常的 `NodeCTL-AB-G-custom8-IP-rules-no-resolve.yaml` 为参考，保留客户端中转、策略组与规则顺序，并补齐自定义直连、WebRTC、外部 classical 模块和自定义分流规则集的 `no-resolve`。参考配置以脱敏测试数据保存，生成结果会逐区块对照验证。
+`custom.11` 新增多版本 sing-box 订阅，同时保留 `custom.10` 的 Clash 行为。Clash 以用户验证正常的 `NodeCTL-AB-G-custom8-IP-rules-no-resolve.yaml` 为参考，保留客户端中转、策略组与规则顺序，并补齐自定义直连、WebRTC、外部 classical 模块和自定义分流规则集的 `no-resolve`。参考配置以脱敏测试数据保存，生成结果会逐区块对照验证。
 
 升级面板后，在客户端**更新完整的 Clash 订阅并重新加载配置**。只更新中转/落地 Provider 不会刷新顶层规则。订阅地址保持不变，接口新增禁缓存响应和 `X-NodeCTL-Version` 响应头，方便确认收到的面板版本。
 
@@ -284,7 +298,7 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.10 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.11 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -294,14 +308,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.10
+  ghcr.io/illria/nodectl:v0.4.76-custom.11
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.10` |
+| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.11` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |

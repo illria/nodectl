@@ -1,0 +1,38 @@
+name: Sing-box Core Compatibility
+
+on:
+  push:
+    branches: [feat/singbox-subscriptions-v11]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  core-check:
+    name: Check sing-box ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [1.8.14, 1.9.7, 1.10.7, 1.11.15, 1.12.25, 1.13.21, 1.14.2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Export multi-protocol compatibility fixtures
+        env:
+          NODECTL_SINGBOX_FIXTURES: ${{ runner.temp }}/singbox-fixtures
+        run: go test ./internal/service -run TestSingBoxCompatibility -count=1
+      - name: Check generated config with official core
+        env:
+          CORE_VERSION: ${{ matrix.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/singbox-core"
+          curl --fail --location --retry 3 "https://github.com/SagerNet/sing-box/releases/download/v${CORE_VERSION}/sing-box-${CORE_VERSION}-linux-amd64.tar.gz" -o "$RUNNER_TEMP/core.tar.gz"
+          tar -xzf "$RUNNER_TEMP/core.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/singbox-core"
+          CORE_MINOR="${CORE_VERSION%.*}"
+          "$RUNNER_TEMP/singbox-core/sing-box" check -c "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}.json"

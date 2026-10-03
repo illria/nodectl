@@ -1,0 +1,520 @@
+package service
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/netip"
+	"net/url"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
+)
+
+type sbObject = map[string]interface{}
+
+type singBoxProfile struct {
+	Groups []struct {
+		Name    string   `yaml:"name"`
+		Type    string   `yaml:"type"`
+		Proxies []string `yaml:"proxies"`
+		Use     []string `yaml:"use"`
+		Filter  string   `yaml:"filter"`
+	} `yaml:"proxy-groups"`
+	Providers map[string]singBoxProvider `yaml:"rule-providers"`
+	Rules     []string                   `yaml:"rules"`
+}
+type singBoxProvider struct {
+	URL      string `yaml:"url"`
+	Behavior string `yaml:"behavior"`
+	Format   string `yaml:"format"`
+}
+
+// SingBoxMinor rejects untested future schemas rather than emitting a best-effort config.
+func SingBoxMinor(version string) (int, error) {
+	if version == "" {
+		version = "1.14"
+	}
+	if !regexp.MustCompile(`^v?1\.(8|9|10|11|12|13|14)(\.\d+)?$`).MatchString(version) {
+		return 0, fmt.Errorf("支持 sing-box 1.8～1.14，请填写内核版本（例如 1.12.25）")
+	}
+	parts := strings.Split(strings.TrimPrefix(version, "v"), ".")
+	minor, _ := strconv.Atoi(parts[1])
+	return minor, nil
+}
+
+func loadSingBoxProfile(baseURL, token string) (*singBoxProfile, error) {
+	text, err := RenderClashConfig("", "", baseURL, token)
+	if err != nil {
+		return nil, err
+	}
+	var p singBoxProfile
+	if err = yaml.Unmarshal([]byte(text), &p); err != nil {
+		return nil, err
+	}
+	p.Providers["CN_域"] = singBoxProvider{URL: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.list", Behavior: "domain"}
+	p.Providers["CN_IP"] = singBoxProvider{URL: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.list", Behavior: "ipcidr"}
+	return &p, nil
+}
+
+// GenerateSingBoxConfig shares node collection and routing policy with the Clash exporter.
+func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) ([]byte, []string, error) {
+	minor, err := SingBoxMinor(version)
+	if err != nil {
+		return nil, nil, err
+	}
+	if mode == "" {
+		mode = "full"
+	}
+	if mode != "full" && mode != "outbounds" {
+		return nil, nil, fmt.Errorf("mode 必须为 full 或 outbounds")
+	}
+	pools := map[string][]*ClashNode{}
+	for _, pool := range []struct {
+		name    string
+		routing int
+	}{{"中转机场", 1}, {"落地机场", 2}} {
+		raw, e := GenerateRawNodesYAML(pool.routing, useFlag)
+		if e != nil {
+			return nil, nil, e
+		}
+		var provider ClashProvider
+		if e = yaml.Unmarshal([]byte(raw), &provider); e != nil {
+			return nil, nil, e
+		}
+		pools[pool.name] = provider.Proxies
+	}
+	p, err := loadSingBoxProfile(baseURL, token)
+	if err != nil {
+		return nil, nil, err
+	}
+	return buildSingBoxConfig(p, pools, baseURL, token, minor, mode)
+}
+
+func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseURL, token string, minor int, mode string) ([]byte, []string, error) {
+	out := []sbObject{{"type": "direct", "tag": "🇨🇳 大陆"}, {"type": "direct", "tag": "中转关闭"}}
+	reserved := map[string]bool{"🇨🇳 大陆": true, "中转关闭": true, "dns-out": true, "block": true}
+	for _, g := range p.Groups {
+		if reserved[g.Name] {
+			return nil, nil, fmt.Errorf("策略组名称重复: %s", g.Name)
+		}
+		reserved[g.Name] = true
+	}
+	poolTags := map[string][]string{}
+	originalNames := map[string]string{}
+	var warnings []string
+	for _, pool := range []string{"中转机场", "落地机场"} {
+		nodes := append([]*ClashNode(nil), pools[pool]...)
+		sort.SliceStable(nodes, func(i, j int) bool {
+			return fmt.Sprintf("%s/%s/%s/%d", nodes[i].Name, nodes[i].Type, nodes[i].Server, nodes[i].Port) < fmt.Sprintf("%s/%s/%s/%d", nodes[j].Name, nodes[j].Type, nodes[j].Server, nodes[j].Port)
+		})
+		for _, n := range nodes {
+			if n.Type == "direct" {
+				continue
+			}
+			ob, e := singBoxOutbound(n, minor)
+			if e != nil {
+				warnings = append(warnings, fmt.Sprintf("%s: %s", n.Name, e))
+				continue
+			}
+			prefix := "落地 · "
+			if pool == "中转机场" {
+				prefix = "中转 · "
+			}
+			tag := prefix + n.Name
+			for suffix := 2; reserved[tag]; suffix++ {
+				tag = fmt.Sprintf("%s%s (%d)", prefix, n.Name, suffix)
+			}
+			reserved[tag] = true
+			ob["tag"] = tag
+			if pool == "落地机场" {
+				ob["detour"] = "💠 中转策略"
+			}
+			out = append(out, ob)
+			poolTags[pool] = append(poolTags[pool], tag)
+			originalNames[tag] = n.Name
+		}
+	}
+	if len(poolTags["落地机场"]) == 0 {
+		return nil, warnings, fmt.Errorf("没有适用于 sing-box 1.%d 的落地节点，请配置落地节点或选择其他内核版本", minor)
+	}
+	// Determine available region groups from actual compatible nodes; no empty selectors.
+	available := map[string]bool{"🇨🇳 大陆": true, "中转关闭": true}
+	groupNodes := map[string][]string{}
+	for _, g := range p.Groups {
+		var filter *regexp.Regexp
+		if g.Filter != "" {
+			var e error
+			filter, e = regexp.Compile(g.Filter)
+			if e != nil {
+				return nil, warnings, fmt.Errorf("策略组 %s 的筛选表达式无效", g.Name)
+			}
+		}
+		for _, pool := range g.Use {
+			for _, tag := range poolTags[pool] {
+				if filter == nil || filter.MatchString(originalNames[tag]) {
+					groupNodes[g.Name] = append(groupNodes[g.Name], tag)
+				}
+			}
+		}
+		available[g.Name] = g.Filter == "" || len(groupNodes[g.Name]) > 0
+	}
+	for _, g := range p.Groups {
+		if !available[g.Name] {
+			continue
+		}
+		tags := []string{}
+		seen := map[string]bool{}
+		for _, tag := range append(append([]string{}, g.Proxies...), groupNodes[g.Name]...) {
+			if (available[tag] || originalNames[tag] != "") && !seen[tag] {
+				tags = append(tags, tag)
+				seen[tag] = true
+			}
+		}
+		if len(tags) == 0 {
+			return nil, warnings, fmt.Errorf("策略组 %s 没有可用选项", g.Name)
+		}
+		kind := "selector"
+		if g.Type == "url-test" {
+			kind = "urltest"
+		}
+		ob := sbObject{"type": kind, "tag": g.Name, "outbounds": tags}
+		if kind == "urltest" {
+			ob["url"] = "https://www.gstatic.com/generate_204"
+			ob["interval"] = "5m"
+			ob["tolerance"] = 50
+		} else {
+			ob["default"] = tags[0]
+		}
+		out = append(out, ob)
+	}
+	if mode == "outbounds" {
+		for _, ob := range out {
+			delete(ob, "domain_resolver")
+		}
+		data, e := json.MarshalIndent(sbObject{"outbounds": out}, "", "  ")
+		return data, warnings, e
+	}
+	if minor < 11 {
+		out = append(out, sbObject{"type": "dns", "tag": "dns-out"}, sbObject{"type": "block", "tag": "block"})
+	}
+	rules := []sbObject{}
+	dnsRule := sbObject{"port": []int{53}}
+	if minor >= 11 {
+		dnsRule["action"] = "hijack-dns"
+	} else {
+		dnsRule["outbound"] = "dns-out"
+	}
+	rules = append(rules, dnsRule)
+	used := map[string]bool{}
+	for _, line := range p.Rules {
+		parts := strings.Split(line, ",")
+		if len(parts) < 2 {
+			return nil, warnings, fmt.Errorf("不支持的路由规则: %s", line)
+		}
+		if parts[0] == "MATCH" {
+			continue
+		}
+		var match sbObject
+		var e error
+		targetIndex := 2
+		switch parts[0] {
+		case "RULE-SET":
+			match = sbObject{"rule_set": []string{parts[1]}}
+			used[parts[1]] = true
+		case "GEOSITE", "GEOIP":
+			if !strings.EqualFold(parts[1], "CN") {
+				return nil, warnings, fmt.Errorf("不支持的地理规则: %s", line)
+			}
+			tag := "CN_域"
+			if parts[0] == "GEOIP" {
+				tag = "CN_IP"
+			}
+			match = sbObject{"rule_set": []string{tag}}
+			used[tag] = true
+		default:
+			match, e = singBoxRule(strings.Join(parts[:2], ","), "classical")
+			if e != nil {
+				return nil, warnings, e
+			}
+		}
+		if len(parts) <= targetIndex {
+			return nil, warnings, fmt.Errorf("路由规则缺少策略: %s", line)
+		}
+		target := parts[targetIndex]
+		if target == "REJECT" || target == "⛔️ 拒绝连接" {
+			if minor >= 11 {
+				match["action"] = "reject"
+			} else {
+				match["outbound"] = "block"
+			}
+		} else {
+			if target == "DIRECT" {
+				target = "🇨🇳 大陆"
+			}
+			if !available[target] {
+				return nil, warnings, fmt.Errorf("规则引用不存在的策略组: %s", target)
+			}
+			match["outbound"] = target
+			if minor >= 11 {
+				match["action"] = "route"
+			}
+		}
+		rules = append(rules, match)
+	}
+	names := []string{}
+	for name := range used {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sets := []sbObject{}
+	for _, name := range names {
+		provider, ok := p.Providers[name]
+		if !ok {
+			return nil, warnings, fmt.Errorf("规则集不存在: %s", name)
+		}
+		if _, e := singBoxSourceURL(provider); e != nil {
+			return nil, warnings, fmt.Errorf("规则集 %s: %w", name, e)
+		}
+		sets = append(sets, sbObject{"type": "remote", "tag": name, "format": "source", "url": strings.TrimRight(baseURL, "/") + "/sub/singbox/rules/" + url.PathEscape(name) + "?token=" + url.QueryEscape(token), "download_detour": "🇨🇳 大陆", "update_interval": "24h"})
+	}
+	route := sbObject{"rules": rules, "rule_set": sets, "final": "总模式", "auto_detect_interface": true}
+	dns := sbObject{"final": "dns-remote", "strategy": "prefer_ipv4", "reverse_mapping": true}
+	if minor >= 12 {
+		dns["servers"] = []sbObject{{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "总模式"}, {"type": "https", "tag": "dns-bootstrap", "server": "223.5.5.5"}}
+		route["default_domain_resolver"] = "dns-bootstrap"
+	} else {
+		dns["servers"] = []sbObject{{"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "detour": "总模式"}, {"tag": "dns-bootstrap", "address": "https://223.5.5.5/dns-query", "detour": "中转关闭"}}
+		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
+	}
+	tun := sbObject{"type": "tun", "tag": "tun-in", "auto_route": true, "strict_route": true}
+	if minor >= 10 {
+		tun["address"] = []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}
+	} else {
+		tun["inet4_address"] = []string{"172.19.0.1/30"}
+		tun["inet6_address"] = []string{"fdfe:dcba:9876::1/126"}
+	}
+	mixed := sbObject{"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 7890}
+	if minor < 11 {
+		mixed["sniff"] = true
+		tun["sniff"] = true
+	} else {
+		rules = append(rules[:1], append([]sbObject{{"action": "sniff"}}, rules[1:]...)...)
+		route["rules"] = rules
+	}
+	config := sbObject{"log": sbObject{"level": "warn"}, "dns": dns, "inbounds": []sbObject{mixed, tun}, "outbounds": out, "route": route, "experimental": sbObject{"cache_file": sbObject{"enabled": true}, "clash_api": sbObject{"external_controller": "127.0.0.1:9090"}}}
+	data, e := json.MarshalIndent(config, "", "  ")
+	return data, warnings, e
+}
+
+func singBoxOutbound(n *ClashNode, minor int) (sbObject, error) {
+	if n.Server == "" || n.Port < 1 || n.Port > 65535 {
+		return nil, fmt.Errorf("服务器或端口无效")
+	}
+	if n.Type == "vmess" || n.Type == "vless" || n.Type == "tuic" {
+		if _, err := uuid.Parse(n.UUID); err != nil {
+			return nil, fmt.Errorf("UUID 无效")
+		}
+	}
+	if len(n.RealityOpts) > 0 && !n.TLS {
+		return nil, fmt.Errorf("Reality 需要 TLS")
+	}
+	o := sbObject{"type": n.Type, "server": n.Server, "server_port": n.Port}
+	if n.Network == "quic" && !n.TLS {
+		return nil, fmt.Errorf("QUIC 传输需要 TLS")
+	}
+	tlsRequired := n.TLS
+	switch n.Type {
+	case "ss":
+		o["type"] = "shadowsocks"
+		o["method"] = n.Cipher
+		o["password"] = n.Password
+		if n.Plugin != "" {
+			if n.Plugin != "obfs" && n.Plugin != "obfs-local" && n.Plugin != "v2ray-plugin" {
+				return nil, fmt.Errorf("不支持的 Shadowsocks 插件")
+			}
+			plugin := n.Plugin
+			if plugin == "obfs" {
+				plugin = "obfs-local"
+			}
+			o["plugin"] = plugin
+			keys := []string{}
+			for k := range n.PluginOpts {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			opts := []string{}
+			for _, k := range keys {
+				v := n.PluginOpts[k]
+				optionKey := k
+				if plugin == "obfs-local" {
+					if k == "mode" {
+						optionKey = "obfs"
+					}
+					if k == "host" {
+						optionKey = "obfs-host"
+					}
+				}
+				if v == true {
+					opts = append(opts, optionKey)
+				} else if v != false {
+					opts = append(opts, optionKey+"="+fmt.Sprint(v))
+				}
+			}
+			o["plugin_opts"] = strings.Join(opts, ";")
+		}
+	case "vmess":
+		o["uuid"] = n.UUID
+		o["security"] = n.Cipher
+		if n.Cipher == "" {
+			o["security"] = "auto"
+		}
+		if n.AlterId != nil {
+			o["alter_id"] = *n.AlterId
+		}
+	case "vless":
+		o["uuid"] = n.UUID
+		if n.Flow != "" {
+			o["flow"] = n.Flow
+		}
+	case "trojan":
+		o["password"] = n.Password
+		tlsRequired = true
+	case "hysteria2":
+		o["password"] = n.Password
+		tlsRequired = true
+		if n.Obfs != "" && n.Obfs != "none" {
+			o["obfs"] = sbObject{"type": n.Obfs, "password": n.ObfsPassword}
+		}
+	case "hysteria":
+		tlsRequired = true
+		o["auth_str"] = n.AuthStr
+		up, down := n.Up, n.Down
+		if up <= 0 {
+			up = 100
+		}
+		if down <= 0 {
+			down = 100
+		}
+		o["up_mbps"] = up
+		o["down_mbps"] = down
+		if n.Obfs != "" {
+			o["obfs"] = n.Obfs
+		}
+	case "tuic":
+		tlsRequired = true
+		o["uuid"] = n.UUID
+		o["password"] = n.Password
+		if n.CongestionController != "" {
+			o["congestion_control"] = n.CongestionController
+		}
+		if n.UDPRelayMode != "" {
+			o["udp_relay_mode"] = n.UDPRelayMode
+		}
+	case "anytls":
+		if minor < 12 {
+			return nil, fmt.Errorf("AnyTLS 需要 sing-box 1.12 或更新版本")
+		}
+		tlsRequired = true
+		o["password"] = n.Password
+	case "socks5":
+		o["type"] = "socks"
+		o["version"] = "5"
+		if n.Username != "" {
+			o["username"] = n.Username
+			o["password"] = n.Password
+		}
+	case "http":
+		if n.Username != "" {
+			o["username"] = n.Username
+			o["password"] = n.Password
+		}
+	default:
+		return nil, fmt.Errorf("sing-box 不支持协议 %s", n.Type)
+	}
+	if n.PacketEncoding != "" && (n.Type == "vmess" || n.Type == "vless") {
+		o["packet_encoding"] = n.PacketEncoding
+	}
+	if tlsRequired {
+		t := sbObject{"enabled": true, "insecure": n.SkipCertVerify}
+		sni := n.ServerName
+		if sni == "" {
+			sni = n.SNI
+		}
+		if sni != "" {
+			t["server_name"] = sni
+		}
+		if len(n.ALPN) > 0 {
+			t["alpn"] = n.ALPN
+		}
+		if n.ClientFingerprint != "" {
+			t["utls"] = sbObject{"enabled": true, "fingerprint": n.ClientFingerprint}
+		}
+		if len(n.RealityOpts) > 0 {
+			t["reality"] = sbObject{"enabled": true, "public_key": n.RealityOpts["public-key"], "short_id": n.RealityOpts["short-id"]}
+		}
+		o["tls"] = t
+	}
+	if n.Network != "" && n.Network != "tcp" {
+		if n.Type != "vmess" && n.Type != "vless" && n.Type != "trojan" {
+			return nil, fmt.Errorf("协议不支持该传输")
+		}
+		transport := sbObject{"type": n.Network}
+		switch n.Network {
+		case "ws":
+			if n.WSOpts["v2ray-http-upgrade"] == true {
+				transport["type"] = "httpupgrade"
+			}
+			if path, ok := n.WSOpts["path"]; ok {
+				transport["path"] = path
+			}
+			if headers, ok := n.WSOpts["headers"]; ok {
+				if transport["type"] == "httpupgrade" {
+					switch h := headers.(type) {
+					case map[string]interface{}:
+						transport["host"] = h["Host"]
+					case map[string]string:
+						transport["host"] = h["Host"]
+					}
+				} else {
+					transport["headers"] = headers
+				}
+			}
+		case "grpc":
+			transport["service_name"] = n.GRPCOpts["grpc-service-name"]
+		case "http":
+			if path, ok := n.HTTPOpts["path"]; ok {
+				switch v := path.(type) {
+				case []interface{}:
+					if len(v) > 0 {
+						transport["path"] = v[0]
+					}
+				case []string:
+					if len(v) > 0 {
+						transport["path"] = v[0]
+					}
+				default:
+					transport["path"] = path
+				}
+			}
+			if headers, ok := n.HTTPOpts["headers"].(map[string]interface{}); ok {
+				if host, ok := headers["Host"]; ok {
+					transport["host"] = host
+				}
+			}
+		case "quic":
+		default:
+			return nil, fmt.Errorf("不支持的传输 %s", n.Network)
+		}
+		o["transport"] = transport
+	}
+	if minor >= 12 {
+		if _, e := netip.ParseAddr(n.Server); e != nil {
+			o["domain_resolver"] = "dns-bootstrap"
+		}
+	}
+	return o, nil
+}
