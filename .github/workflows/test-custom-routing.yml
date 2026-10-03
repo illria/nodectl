@@ -12,12 +12,13 @@ on:
       - feat/singbox-subscriptions-v11
       - fix/singbox-ios-v12
       - fix/singbox-modes-v13
+      - fix/singbox-cn-direct-v14
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.13
+  VERSION: v0.4.76-custom.14
   AGENT_VERSION: v0.2.77
 
 concurrency:

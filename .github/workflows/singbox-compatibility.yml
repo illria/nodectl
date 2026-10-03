@@ -2,7 +2,7 @@ name: Sing-box Core Compatibility
 
 on:
   push:
-    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13]
+    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13, fix/singbox-cn-direct-v14]
   workflow_call:
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
           mkdir -p "$NODECTL_SINGBOX_FIXTURES"
           curl --fail --location --retry 3 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/cb3e075825906a4dcc2feff84e3d6cc5691d9416/geo/geosite/cn.list' -o "$NODECTL_SINGBOX_FIXTURES/cn.list"
           export NODECTL_SINGBOX_LARGE_SOURCE="$NODECTL_SINGBOX_FIXTURES/cn.list"
-          go test ./internal/service -run 'TestSingBoxCompatibility|TestSingBoxLargeRuleFixture' -count=1
+          go test ./internal/service -run 'TestSingBoxCompatibility|TestSingBoxLargeRuleFixture|TestSingBoxDomesticPolicy' -count=1
       - name: Check generated config with official core
         env:
           CORE_VERSION: ${{ matrix.version }}
@@ -41,3 +41,4 @@ jobs:
           CORE_MINOR="${CORE_VERSION%.*}"
           "$RUNNER_TEMP/singbox-core/sing-box" check -c "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}.json"
           python3 scripts/check_singbox_runtime.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}-mobile.json" --rules "$RUNNER_TEMP/singbox-fixtures/rules.srs" --large-rules "$RUNNER_TEMP/singbox-fixtures/cn.srs"
+          python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}-mobile.json"

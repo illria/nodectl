@@ -38,6 +38,107 @@ func TestSingBoxVersions(t *testing.T) {
 	}
 }
 
+func TestSingBoxDomesticPolicy(t *testing.T) {
+	p := singBoxTestProfile(t)
+	pools := map[string][]*ClashNode{"落地机场": {{Name: "香港", Type: "socks5", Server: "192.0.2.1", Port: 1080}}}
+	for minor := 8; minor <= 14; minor++ {
+		t.Run(fmt.Sprint(minor), func(t *testing.T) {
+			data, _, err := buildSingBoxConfig(p, pools, "https://panel.example", "secret", minor, "mobile")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var c struct {
+				Outbounds []sbObject `json:"outbounds"`
+				DNS       struct {
+					Final            string     `json:"final"`
+					Rules            []sbObject `json:"rules"`
+					IndependentCache bool       `json:"independent_cache"`
+				} `json:"dns"`
+				Route struct {
+					Rules []sbObject `json:"rules"`
+				} `json:"route"`
+			}
+			if err = json.Unmarshal(data, &c); err != nil {
+				t.Fatal(err)
+			}
+			for _, ob := range c.Outbounds {
+				name := ob["tag"].(string)
+				if singBoxDomesticGroup(name) && ob["default"] != "🇨🇳 大陆" {
+					t.Fatalf("domestic app %s defaults to proxy", name)
+				}
+				if name == "Google" || name == "TikTok" || name == "Custom" {
+					if ob["default"] != "总模式" {
+						t.Fatalf("overseas/custom selector %s was changed", name)
+					}
+				}
+			}
+			if c.DNS.Final != "dns-remote" || (minor < 14 && !c.DNS.IndependentCache) {
+				t.Fatal("overseas DNS fallback or independent cache missing")
+			}
+			indexes := map[string]int{}
+			for i, r := range c.DNS.Rules {
+				if m, ok := r["clash_mode"].(string); ok {
+					indexes[m] = i
+				}
+				if sets, ok := r["rule_set"].([]interface{}); ok {
+					if r["clash_mode"] != "Rule" || r["server"] != "dns-bootstrap" {
+						t.Fatal("domestic DNS scope incorrect")
+					}
+					indexes["domestic"] = i
+					foundCN := false
+					for _, set := range sets {
+						name := set.(string)
+						if p.Providers[name].Behavior != "domain" {
+							t.Fatal("non-domain rule can expose overseas queries", name)
+						}
+						if name == "CN_域" {
+							foundCN = true
+						} else if !singBoxDomesticGroup(strings.TrimSuffix(name, "_域")) {
+							t.Fatal("overseas app uses direct DNS", name)
+						}
+					}
+					if !foundCN {
+						t.Fatal("domestic DNS depends on optional app selectors")
+					}
+				}
+			}
+			if _, ok := indexes["domestic"]; !ok || indexes["domestic"] >= indexes["Rule"] || indexes["domestic"] <= indexes["Global"] || indexes["domestic"] <= indexes["Direct"] {
+				t.Fatal("mode overrides / domestic DNS / fallback order incorrect", indexes)
+			}
+			cnRules := 0
+			for _, r := range c.Route.Rules {
+				for _, name := range []string{"CN_域", "CN_IP"} {
+					if sets, ok := r["rule_set"].([]interface{}); ok && len(sets) == 1 && sets[0] == name {
+						cnRules++
+						if r["outbound"] != "🇨🇳 大陆" {
+							t.Fatal("domestic fallback not direct", name)
+						}
+					}
+				}
+			}
+			if cnRules != 2 {
+				t.Fatal("domestic routing needs no app-specific selector")
+			}
+		})
+	}
+	if dir := os.Getenv("NODECTL_SINGBOX_FIXTURES"); dir != "" {
+		source, err := convertSingBoxRuleSource([]byte("DOMAIN-SUFFIX,domestic-module.test"), "classical")
+		if err != nil {
+			t.Fatal(err)
+		}
+		binary, err := CompileSingBoxRuleSet(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(dir, "domestic-module.srs"), binary, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestSingBoxCompatibility(t *testing.T) {
 	p := singBoxTestProfile(t)
 	alter := 0
