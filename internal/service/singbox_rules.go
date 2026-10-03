@@ -165,7 +165,7 @@ func convertSingBoxRuleSource(data []byte, behavior string) ([]byte, error) {
 		}
 		rules = append(rules, rule)
 	}
-	return json.Marshal(sbObject{"version": 1, "rules": rules})
+	return json.Marshal(sbObject{"version": 1, "rules": compactSingBoxRules(rules)})
 }
 
 var singBoxRuleCache = struct {

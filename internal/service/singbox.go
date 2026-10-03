@@ -67,10 +67,10 @@ func GenerateSingBoxConfig(baseURL, token, version, mode string, useFlag bool) (
 		return nil, nil, err
 	}
 	if mode == "" {
-		mode = "full"
+		mode = "mobile"
 	}
-	if mode != "full" && mode != "outbounds" {
-		return nil, nil, fmt.Errorf("mode 必须为 full 或 outbounds")
+	if mode != "full" && mode != "mobile" && mode != "outbounds" {
+		return nil, nil, fmt.Errorf("mode 必须为 mobile、full 或 outbounds")
 	}
 	pools := map[string][]*ClashNode{}
 	for _, pool := range []struct {
@@ -279,7 +279,7 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		if _, e := singBoxSourceURL(provider); e != nil {
 			return nil, warnings, fmt.Errorf("规则集 %s: %w", name, e)
 		}
-		sets = append(sets, sbObject{"type": "remote", "tag": name, "format": "source", "url": strings.TrimRight(baseURL, "/") + "/sub/singbox/rules/" + url.PathEscape(name) + "?token=" + url.QueryEscape(token), "download_detour": "🇨🇳 大陆", "update_interval": "24h"})
+		sets = append(sets, sbObject{"type": "remote", "tag": name, "format": "binary", "url": strings.TrimRight(baseURL, "/") + "/sub/singbox/rules/" + url.PathEscape(name) + "?token=" + url.QueryEscape(token) + "&format=binary", "download_detour": "🇨🇳 大陆", "update_interval": "24h"})
 	}
 	route := sbObject{"rules": rules, "rule_set": sets, "final": "总模式", "auto_detect_interface": true}
 	dns := sbObject{"final": "dns-remote", "strategy": "prefer_ipv4", "reverse_mapping": true}
@@ -306,6 +306,10 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		route["rules"] = rules
 	}
 	config := sbObject{"log": sbObject{"level": "warn"}, "dns": dns, "inbounds": []sbObject{mixed, tun}, "outbounds": out, "route": route, "experimental": sbObject{"cache_file": sbObject{"enabled": true}, "clash_api": sbObject{"external_controller": "127.0.0.1:9090"}}}
+	if mode == "mobile" {
+		config["inbounds"] = []sbObject{tun}
+		config["experimental"] = sbObject{"cache_file": sbObject{"enabled": true}}
+	}
 	data, e := json.MarshalIndent(config, "", "  ")
 	return data, warnings, e
 }
