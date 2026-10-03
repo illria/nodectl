@@ -10,14 +10,14 @@ permissions:
   packages: write
 
 env:
-  VERSION: v0.4.76-custom.13
+  VERSION: v0.4.76-custom.14
   AGENT_VERSION: v0.2.77
   IMAGE: ghcr.io/illria/nodectl
 
 jobs:
   go-test:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
-    name: Verify v13 subscriptions
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
+    name: Verify v14 subscriptions
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -34,11 +34,11 @@ jobs:
         run: go test ./...
 
   singbox-check:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
     uses: ./.github/workflows/singbox-compatibility.yml
 
   build-panel:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
     needs: [go-test, singbox-check]
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
           retention-days: 1
 
   build-agent:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
     needs: [go-test, singbox-check]
     name: Build Agent ${{ matrix.goarch }}
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
           retention-days: 1
 
   publish-release:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
     name: Publish GitHub Release
     needs: [build-panel, build-agent]
     runs-on: ubuntu-latest
@@ -159,18 +159,20 @@ jobs:
           body: |
             illria/nodectl 独立维护版，基于上游 NodeCTL v0.4.76。
 
-            ### v0.4.76-custom.13
-            - 补齐原生 Rule / Global / Direct 模式和默认 Rule 设置，恢复手机客户端模式选择
-            - 路由及 DNS 随模式切换：Rule 使用现有分流；Global 使用总模式；Direct 使用直连及国内加密 DNS
-            - 手机保留内部模式管理，不开放外部控制端口
-            - 八核心 CI 实际切换三种模式，验证模式列表、服务启动和远程 SRS 规则
-            - 保留 custom.12 的低内存二进制规则和手机完整 VPN；Agent 无需升级
+            ### v0.4.76-custom.14
+            - sing-box 国内软件组（小红书、抖音、BiliBili）默认直连，不再默认继承总模式
+            - Rule 模式国内域名使用直连加密 DNS，国外/未知域名继续使用代理 DoH，无国内 DNS 兜底
+            - 微信/淘宝无需额外策略组，仍由国内域名/IP 规则直连；保留自定义分流优先级
+            - 隔离不同 DNS 服务器缓存，避免 Global/Rule 切换后沿用不合适的 CDN 答案
+            - 八核心 CI 实际验证国内 CDN/软件组流量及 DNS 直连、国外代理，以及跨模式缓存隔离
+            - 保留低内存 SRS 和手机模式选择；Clash 与 Agent 无需变更
 
             更新面板后，刷新完整手机订阅并重启 VPN。
-            Direct 模式有意直连流量和 DNS；Rule/Global 继续使用代理 DoH。国内网站慢仍需根据实际连接出口和网站诊断。
+            若客户端保留旧选择，请将国内软件组切为“🇨🇳 大陆”。国内 DNS 直连是有意分流，国外 DNS 不回退到国内服务器。
+            CI 为 Linux loopback 路由/DNS 测试，不是 iOS 实机或用户网络延迟验证。
 
             ### Docker
-            `ghcr.io/illria/nodectl:v0.4.76-custom.13`
+            `ghcr.io/illria/nodectl:v0.4.76-custom.14`
 
             也提供：
             - `ghcr.io/illria/nodectl:latest`
@@ -181,7 +183,7 @@ jobs:
           generate_release_notes: false
 
   publish-image:
-    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.13' }}"
+    if: "${{ github.event.head_commit.message == 'release: publish v0.4.76-custom.14' }}"
     name: Publish Docker Image
     needs: build-panel
     runs-on: ubuntu-latest

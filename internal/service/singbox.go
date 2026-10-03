@@ -33,6 +33,16 @@ type singBoxProvider struct {
 	Format   string `yaml:"format"`
 }
 
+// Domestic app selectors default to direct, not the overseas catch-all selector.
+// Keep this specific to sing-box; do not change the user's verified Clash template.
+func singBoxDomesticGroup(name string) bool {
+	switch name {
+	case "小红书", "抖音", "BiliBili":
+		return true
+	}
+	return false
+}
+
 // SingBoxMinor rejects untested future schemas rather than emitting a best-effort config.
 func SingBoxMinor(version string) (int, error) {
 	if version == "" {
@@ -188,6 +198,9 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 			ob["tolerance"] = 50
 		} else {
 			ob["default"] = tags[0]
+			if singBoxDomesticGroup(g.Name) && seen["🇨🇳 大陆"] {
+				ob["default"] = "🇨🇳 大陆"
+			}
 		}
 		out = append(out, ob)
 	}
@@ -290,6 +303,11 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 	}
 	route := sbObject{"rules": rules, "rule_set": sets, "final": "总模式", "auto_detect_interface": true}
 	dns := sbObject{"final": "dns-remote", "strategy": "prefer_ipv4", "reverse_mapping": true}
+	if minor < 14 {
+		// Older cores share answers across servers by default. A Global answer
+		// must not be reused after switching back to domestic Rule-mode DNS.
+		dns["independent_cache"] = true
+	}
 	if minor >= 12 {
 		dns["servers"] = []sbObject{{"type": "https", "tag": "dns-remote", "server": "1.1.1.1", "detour": "总模式"}, {"type": "https", "tag": "dns-bootstrap", "server": "223.5.5.5"}}
 		route["default_domain_resolver"] = "dns-bootstrap"
@@ -298,13 +316,35 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
 	}
 	dnsRules, _ := dns["rules"].([]sbObject)
-	for _, m := range []struct{ name, server string }{{"Direct", "dns-bootstrap"}, {"Global", "dns-remote"}, {"Rule", "dns-remote"}} {
+	for _, m := range []struct{ name, server string }{{"Direct", "dns-bootstrap"}, {"Global", "dns-remote"}} {
 		rule := sbObject{"clash_mode": m.name, "server": m.server}
 		if minor >= 11 {
 			rule["action"] = "route"
 		}
 		dnsRules = append(dnsRules, rule)
 	}
+	// Resolve domestic domains locally before the Rule-mode catch-all. GeoIP
+	// alone is not sufficient: remote DNS can select an overseas CDN address.
+	// Only domain-only providers may enter this allowlist; an IP/port/process
+	// rule set must never accidentally expose unrelated overseas DNS queries.
+	domesticSets := []string{}
+	for _, name := range names {
+		if name == "CN_域" || (p.Providers[name].Behavior == "domain" && strings.HasSuffix(name, "_域") && singBoxDomesticGroup(strings.TrimSuffix(name, "_域"))) {
+			domesticSets = append(domesticSets, name)
+		}
+	}
+	if len(domesticSets) > 0 {
+		rule := sbObject{"clash_mode": "Rule", "rule_set": domesticSets, "server": "dns-bootstrap"}
+		if minor >= 11 {
+			rule["action"] = "route"
+		}
+		dnsRules = append(dnsRules, rule)
+	}
+	rule := sbObject{"clash_mode": "Rule", "server": "dns-remote"}
+	if minor >= 11 {
+		rule["action"] = "route"
+	}
+	dnsRules = append(dnsRules, rule)
 	dns["rules"] = dnsRules
 	tun := sbObject{"type": "tun", "tag": "tun-in", "auto_route": true, "strict_route": true}
 	if minor >= 10 {
