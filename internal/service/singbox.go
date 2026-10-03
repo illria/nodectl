@@ -209,6 +209,13 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		dnsRule["outbound"] = "dns-out"
 	}
 	rules = append(rules, dnsRule)
+	for _, m := range []struct{ name, target string }{{"Direct", "🇨🇳 大陆"}, {"Global", "总模式"}} {
+		rule := sbObject{"clash_mode": m.name, "outbound": m.target}
+		if minor >= 11 {
+			rule["action"] = "route"
+		}
+		rules = append(rules, rule)
+	}
 	used := map[string]bool{}
 	for _, line := range p.Rules {
 		parts := strings.Split(line, ",")
@@ -290,6 +297,15 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		dns["servers"] = []sbObject{{"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "detour": "总模式"}, {"tag": "dns-bootstrap", "address": "https://223.5.5.5/dns-query", "detour": "中转关闭"}}
 		dns["rules"] = []sbObject{{"outbound": "any", "server": "dns-bootstrap"}}
 	}
+	dnsRules, _ := dns["rules"].([]sbObject)
+	for _, m := range []struct{ name, server string }{{"Direct", "dns-bootstrap"}, {"Global", "dns-remote"}, {"Rule", "dns-remote"}} {
+		rule := sbObject{"clash_mode": m.name, "server": m.server}
+		if minor >= 11 {
+			rule["action"] = "route"
+		}
+		dnsRules = append(dnsRules, rule)
+	}
+	dns["rules"] = dnsRules
 	tun := sbObject{"type": "tun", "tag": "tun-in", "auto_route": true, "strict_route": true}
 	if minor >= 10 {
 		tun["address"] = []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}
@@ -305,10 +321,10 @@ func buildSingBoxConfig(p *singBoxProfile, pools map[string][]*ClashNode, baseUR
 		rules = append(rules[:1], append([]sbObject{{"action": "sniff"}}, rules[1:]...)...)
 		route["rules"] = rules
 	}
-	config := sbObject{"log": sbObject{"level": "warn"}, "dns": dns, "inbounds": []sbObject{mixed, tun}, "outbounds": out, "route": route, "experimental": sbObject{"cache_file": sbObject{"enabled": true}, "clash_api": sbObject{"external_controller": "127.0.0.1:9090"}}}
+	config := sbObject{"log": sbObject{"level": "warn"}, "dns": dns, "inbounds": []sbObject{mixed, tun}, "outbounds": out, "route": route, "experimental": sbObject{"cache_file": sbObject{"enabled": true}, "clash_api": sbObject{"external_controller": "127.0.0.1:9090", "default_mode": "Rule"}}}
 	if mode == "mobile" {
 		config["inbounds"] = []sbObject{tun}
-		config["experimental"] = sbObject{"cache_file": sbObject{"enabled": true}}
+		config["experimental"] = sbObject{"cache_file": sbObject{"enabled": true}, "clash_api": sbObject{"default_mode": "Rule"}}
 	}
 	data, e := json.MarshalIndent(config, "", "  ")
 	return data, warnings, e

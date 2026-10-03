@@ -2,7 +2,7 @@ name: Sing-box Core Compatibility
 
 on:
   push:
-    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12]
+    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13]
   workflow_call:
 
 permissions:

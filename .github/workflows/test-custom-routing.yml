@@ -11,12 +11,13 @@ on:
       - fix/reference-dns-v10
       - feat/singbox-subscriptions-v11
       - fix/singbox-ios-v12
+      - fix/singbox-modes-v13
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.12
+  VERSION: v0.4.76-custom.13
   AGENT_VERSION: v0.2.77
 
 concurrency:
