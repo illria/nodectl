@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.14`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前准备版本：**`v0.4.76-custom.15`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -139,7 +139,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.14`；当前稳定版为 `v0.4.76-custom.14`。
+> 当前准备版本为 `v0.4.76-custom.15`；当前稳定版为 `v0.4.76-custom.15`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -148,7 +148,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.14
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.15
 ```
 
 启动：
@@ -163,7 +163,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.14
+  ghcr.io/illria/nodectl:v0.4.76-custom.15
 ```
 
 访问：
@@ -191,7 +191,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.14
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.15
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -273,11 +273,22 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 
 <https://github.com/illria/nodectl/releases/latest>
 
+### 无中转订阅版本（custom.15）
+
+在“生成订阅 → 订阅分发中心 → 订阅版本”选择 **单节点池（无中转）**，再选择 Clash、sing-box 或 V2Ray / Base64。链接、二维码、复制和 Clash 导入按钮都会使用所选版本；原有链接保持原有中转/落地结构。
+
+- **节点来源**：只导出路由类型为“落地”（`routing_type=2`）的自建、机场及自定义节点，仍过滤禁用协议、屏蔽及达到流量阈值的自建节点。需要加入此版本的节点，请在节点管理中设为落地。
+- **Clash**：对照 `NodeCTL-AB-D-one-provider-custom8-groups.yaml`，只使用 `provider1` 落地节点池，保留软件/地区策略组及当前配置的自定义分流，不含中转策略或 `dialer-proxy`。使用内置 `DIRECT` / `REJECT` 选项，仍沿用客户端 DNS/TUN 设置。
+- **sing-box**：落地节点直接连接，不含中转策略或节点 `detour`。继续适配 1.8～1.14，保留手机完整 VPN、桌面完整配置、配置片段及 custom.14 的国内分流和 DNS 行为。
+- **Base64**：仅包含落地节点链接。该格式不能携带策略组、分流规则或 VPN 设置，分流由客户端配置负责。
+
+对应地址分别为 `/sub/clash?token=订阅令牌&topology=single`、`/sub/singbox?token=订阅令牌&version=1.14&mode=mobile&topology=single`、`/sub/v2ray?token=订阅令牌&topology=single`。不带 `topology` 或指定 `topology=chain` 时继续使用现有版本；非法值返回 400。响应头 `X-NodeCTL-Topology` 标明实际版本。
+
 ### sing-box 订阅
 
 订阅分发中心新增 **sing-box** 卡片，默认“手机完整 VPN”，可选择实际内核的 1.8～1.14 系列以及配置形式。`custom.12` 修复大规则表的高内存问题，`custom.13` 补齐手机客户端 Rule / Global / Direct 模式。
 
-- **手机完整 VPN（默认）**：包含双栈 TUN、DNS 接管、中转、落地、地区测速和分流；需要客户端授权 VPN。订阅参数为 `mode=mobile`，不开放桌面代理/控制端口。
+- **手机完整 VPN（默认）**：包含双栈 TUN、DNS 接管、所选版本的节点/策略组、地区测速和分流；需要客户端授权 VPN。订阅参数为 `mode=mobile`，不开放桌面代理/控制端口。
 - **桌面完整配置**：`mode=full`，额外监听混合代理 `127.0.0.1:7890` 和策略控制接口 `127.0.0.1:9090`。
 - **仅节点和策略组**：提供 `outbounds` 配置片段，不能单独启动手机 VPN，必须由客户端合并 DNS、入站和路由。不会自动更新单个 provider，需客户端定期更新订阅。
 - 请求地址：`/sub/singbox?token=订阅令牌&version=1.14&mode=mobile`。可填写补丁版本，如 `1.12.25`；界面选择系列即可。未来版本和测试版会拒绝生成，以免输出未验证格式。
@@ -303,7 +314,7 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.14 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.15 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -313,14 +324,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.14
+  ghcr.io/illria/nodectl:v0.4.76-custom.15
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.14` |
+| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.15` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |

@@ -13,12 +13,13 @@ on:
       - fix/singbox-ios-v12
       - fix/singbox-modes-v13
       - fix/singbox-cn-direct-v14
+      - feat/single-provider-v15
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.14
+  VERSION: v0.4.76-custom.15
   AGENT_VERSION: v0.2.77
 
 concurrency:
@@ -48,6 +49,15 @@ jobs:
 
       - name: Run Go tests
         run: go test ./...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check subscription modal links and controls
+        run: |
+          npm install --prefix "$RUNNER_TEMP/sub-ui" --ignore-scripts --no-audit --no-fund jsdom@26.1.0
+          NODECTL_UI_TEST_MODULES="$RUNNER_TEMP/sub-ui/node_modules" node scripts/check_subscription_ui.cjs
 
   build-panel:
     name: Build Panel ${{ matrix.goos }} ${{ matrix.goarch }}

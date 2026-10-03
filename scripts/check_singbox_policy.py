@@ -205,6 +205,7 @@ try:
         config['outbounds'].append({'type': 'http', 'tag': 'policy-proxy', 'server': '127.0.0.1', 'server_port': proxy.server_address[1]})
         for server in config['dns']['servers']:
             tag = server['tag']
+            direct_detour = server.get('detour', '🇨🇳 大陆')
             assert server.get('type', 'https') == 'https', 'Generated DNS must stay encrypted'
             assert tag != 'dns-remote' or server['detour'] == '总模式'
             server.clear()
@@ -217,7 +218,7 @@ try:
             if tag == 'dns-remote':
                 server['detour'] = '总模式'
             elif minor < 12:
-                server['detour'] = '中转关闭'
+                server['detour'] = direct_detour
         config['experimental'] = {'clash_api': {'external_controller': f'127.0.0.1:{controller}', 'default_mode': 'Rule'}}
         profile = root / 'profile.json'
         profile.write_text(json.dumps(config))

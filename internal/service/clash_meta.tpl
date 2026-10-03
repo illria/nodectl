@@ -1,4 +1,8 @@
+{{define "exitProvider"}}{{if .SingleProvider}}provider1{{else}}落地机场{{end}}{{end}}
+{{define "directOption"}}{{if .SingleProvider}}DIRECT{{else}}🇨🇳 大陆{{end}}{{end}}
+{{define "rejectOption"}}{{if .SingleProvider}}REJECT{{else}}⛔️ 拒绝连接{{end}}{{end}}
 proxy-providers:
+{{if not .SingleProvider}}
   中转机场:
     type: http
     interval: {{.ProxiesInterval}}
@@ -10,7 +14,8 @@ proxy-providers:
       interval: 300
     override:
       udp: true
-  落地机场:
+{{end}}
+  {{template "exitProvider" .}}:
     type: http
     interval: {{.ProxiesInterval}}
     url: "{{.ExitSubURL}}"
@@ -19,15 +24,19 @@ proxy-providers:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
+{{if not .SingleProvider}}
     override:
       udp: true
       dialer-proxy: '💠 中转策略'
       skip-proxy: false
+{{end}}
 
+{{if not .SingleProvider}}
 proxies:
     - {name: 🇨🇳 大陆, type: direct, udp: true}
     - {name: ⛔️ 拒绝连接, type: reject}
     - {name: 中转关闭, type: direct, udp: true}
+{{end}}
 
 # -------------------- 软件策略通用选项 --------------------
 # 软件模块可以选择总模式、手动/地区策略或直连/拒绝，不引用自身或 GLOBAL。
@@ -68,8 +77,8 @@ proxies:
       - 法国自动
       - 中国大陆地区
       - 中国大陆自动
-      - 🇨🇳 大陆
-      - ⛔️ 拒绝连接
+      - {{template "directOption" $}}
+      - {{template "rejectOption" $}}
 {{end}}
 
 # -------------------- 策略组自动生成 --------------------
@@ -112,28 +121,30 @@ proxy-groups:
       - 法国自动
       - 中国大陆地区
       - 中国大陆自动
-      - 🇨🇳 大陆
-      - ⛔️ 拒绝连接
+      - {{template "directOption" $}}
+      - {{template "rejectOption" $}}
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
 
+{{if not .SingleProvider}}
   - name: '💠 中转策略'
     type: select
     proxies:
       - 中转关闭
     use:
       - 中转机场
+{{end}}
 
   - name: 手动选择
     type: select
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
 
 {{range .ActiveModules}}
   {{if ne .Type "reject"}}
   - name: {{.Name}}
     {{if eq .Name "加密货币"}}icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/bitcoin.svg"{{else if .Icon}}icon: "{{.Icon}}"{{end}}
-{{template "softwareOptions"}}
+{{template "softwareOptions" $}}
   {{end}}
 {{end}}
 
@@ -142,13 +153,13 @@ proxy-groups:
     proxies:
       - 香港自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(香港|HK|Hong Kong)"
 
   - name: 香港自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(香港|^HK|^🇭🇰)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -159,13 +170,13 @@ proxy-groups:
     proxies:
       - 日本自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(日本|JP|Japan)"
 
   - name: 日本自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(日本|^JP|^🇯🇵)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -176,13 +187,13 @@ proxy-groups:
     proxies:
       - 新加坡自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(新加坡|SG|Singapore)"
 
   - name: 新加坡自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(新加坡|^SG|^🇸🇬)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -193,13 +204,13 @@ proxy-groups:
     proxies:
       - 美国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(美国|US|USA|United States)"
 
   - name: 美国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(美国|^🇺🇸)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -210,13 +221,13 @@ proxy-groups:
     proxies:
       - 英国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(英国|UK|United Kingdom)"
 
   - name: 英国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(英国|^🇬🇧)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -227,13 +238,13 @@ proxy-groups:
     proxies:
       - 德国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(德国|DE|Germany)"
 
   - name: 德国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(德国|^🇩🇪)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -244,13 +255,13 @@ proxy-groups:
     proxies:
       - 台湾自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(台湾|TW|Taiwan)"
 
   - name: 台湾自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(台湾|^🇹🇼)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -261,13 +272,13 @@ proxy-groups:
     proxies:
       - 韩国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(韩国|KR|Korea)"
 
   - name: 韩国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(韩国|^🇰🇷)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -278,13 +289,13 @@ proxy-groups:
     proxies:
       - 荷兰自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(荷兰|NL|Netherlands)"
 
   - name: 荷兰自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(荷兰|^🇳🇱)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -295,13 +306,13 @@ proxy-groups:
     proxies:
       - 波兰自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(波兰|PL|Poland)"
 
   - name: 波兰自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(波兰|^🇵🇱)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -312,13 +323,13 @@ proxy-groups:
     proxies:
       - 摩尔多瓦自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(摩尔多瓦|Moldova)"
 
   - name: 摩尔多瓦自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(摩尔多瓦|^🇲🇩)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -329,13 +340,13 @@ proxy-groups:
     proxies:
       - 芬兰自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(芬兰|Finland)"
 
   - name: 芬兰自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(芬兰|^🇫🇮)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -346,13 +357,13 @@ proxy-groups:
     proxies:
       - 印度自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(印度|IN|India)"
 
   - name: 印度自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(印度|^🇮🇳)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -363,13 +374,13 @@ proxy-groups:
     proxies:
       - 泰国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(泰国|TH|Thailand)"
 
   - name: 泰国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(泰国|^🇹🇭)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -380,13 +391,13 @@ proxy-groups:
     proxies:
       - 法国自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(法国|FR|France|KataBump)"
 
   - name: 法国自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(法国|KataBump|^🇫🇷)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -397,13 +408,13 @@ proxy-groups:
     proxies:
       - 中国大陆自动
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(北京|乌兰察布|大陆)"
 
   - name: 中国大陆自动
     type: url-test
     use:
-      - 落地机场
+      - {{template "exitProvider" $}}
     filter: "(?i)(北京|乌兰察布|大陆)"
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -451,8 +462,8 @@ proxy-groups:
       - 法国自动
       - 中国大陆地区
       - 中国大陆自动
-      - 🇨🇳 大陆
-      - ⛔️ 拒绝连接
+      - {{template "directOption" $}}
+      - {{template "rejectOption" $}}
 {{range .CustomProxies}}
       - {{.Name}}
 {{end}}
@@ -461,13 +472,13 @@ proxy-groups:
     icon: "https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/Update.svg"
     type: select
     proxies:
-      - 🇨🇳 大陆
+      - {{template "directOption" $}}
       - 总模式
 
 {{range .CustomProxies}}
   - name: {{.Name}}
     icon: "{{if .Icon}}{{.Icon}}{{else}}https://cdn.jsdelivr.net/gh/GitMetaio/Surfing@rm/Home/icon/User.svg{{end}}"
-{{template "softwareOptions"}}
+{{template "softwareOptions" $}}
 {{end}}
 
 # -------------------- 规则集自动挂载 --------------------

@@ -2,7 +2,7 @@ name: Sing-box Core Compatibility
 
 on:
   push:
-    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13, fix/singbox-cn-direct-v14]
+    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13, fix/singbox-cn-direct-v14, feat/single-provider-v15]
   workflow_call:
 
 permissions:
@@ -39,6 +39,8 @@ jobs:
           curl --fail --location --retry 3 "https://github.com/SagerNet/sing-box/releases/download/v${CORE_VERSION}/sing-box-${CORE_VERSION}-linux-amd64.tar.gz" -o "$RUNNER_TEMP/core.tar.gz"
           tar -xzf "$RUNNER_TEMP/core.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/singbox-core"
           CORE_MINOR="${CORE_VERSION%.*}"
-          "$RUNNER_TEMP/singbox-core/sing-box" check -c "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}.json"
-          python3 scripts/check_singbox_runtime.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}-mobile.json" --rules "$RUNNER_TEMP/singbox-fixtures/rules.srs" --large-rules "$RUNNER_TEMP/singbox-fixtures/cn.srs"
-          python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}-mobile.json"
+          for PROFILE_SUFFIX in '' '-single'; do
+            "$RUNNER_TEMP/singbox-core/sing-box" check -c "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}.json"
+            python3 scripts/check_singbox_runtime.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-mobile.json" --rules "$RUNNER_TEMP/singbox-fixtures/rules.srs" --large-rules "$RUNNER_TEMP/singbox-fixtures/cn.srs"
+            python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-mobile.json"
+          done

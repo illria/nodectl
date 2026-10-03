@@ -13,9 +13,13 @@ import (
 )
 
 func singBoxTestProfile(t *testing.T) *singBoxProfile {
+	return singBoxTestProfileWithTopology(t, TopologyChain)
+}
+
+func singBoxTestProfileWithTopology(t *testing.T, topology SubscriptionTopology) *singBoxProfile {
 	t.Helper()
 	// Use the real rendered template, including regions and custom rules.
-	data := renderClashTemplateForTest(t, ClashTemplateData{BaseURL: "https://panel.example", Token: "secret", ActiveModules: LoadClashModulesConfig().Modules, CustomProxies: []CustomProxyRule{{ID: "custom", Name: "Custom", Content: "example.com"}}, ProxiesInterval: "3600", RulesInterval: "300", PublicRulesInterval: "86400"})
+	data := renderClashTemplateForTest(t, ClashTemplateData{SingleProvider: topology == TopologySingle, BaseURL: "https://panel.example", Token: "secret", ActiveModules: LoadClashModulesConfig().Modules, CustomProxies: []CustomProxyRule{{ID: "custom", Name: "Custom", Content: "example.com"}}, ProxiesInterval: "3600", RulesInterval: "300", PublicRulesInterval: "86400"})
 	var p singBoxProfile
 	if e := yaml.Unmarshal(data, &p); e != nil {
 		t.Fatal(e)
@@ -141,6 +145,7 @@ func TestSingBoxDomesticPolicy(t *testing.T) {
 
 func TestSingBoxCompatibility(t *testing.T) {
 	p := singBoxTestProfile(t)
+	singleProfile := singBoxTestProfileWithTopology(t, TopologySingle)
 	alter := 0
 	nodes := []*ClashNode{
 		{Name: "香港 VLESS", Type: "vless", Server: "proxy.example", Port: 443, UUID: "00000000-0000-4000-8000-000000000001", TLS: true, Network: "ws", WSOpts: map[string]interface{}{"path": "/ws", "headers": map[string]interface{}{"Host": "proxy.example"}}},
@@ -256,6 +261,50 @@ func TestSingBoxCompatibility(t *testing.T) {
 			}
 			if strings.Contains(string(fragment), "dns-bootstrap") || strings.Contains(string(fragment), `"route"`) {
 				t.Fatal("fragment references absent DNS/route")
+			}
+			for _, mode := range []string{"full", "mobile", "outbounds"} {
+				single, _, err := buildSingBoxConfigWithTopology(singleProfile, map[string][]*ClashNode{"provider1": nodes, "中转机场": pools["中转机场"]}, "https://panel.example", "secret", minor, mode, TopologySingle)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, forbidden := range []string{"中转策略", "中转关闭", "中转 · ", "192.0.2.20"} {
+					if strings.Contains(string(single), forbidden) {
+						t.Fatal("single provider exported relay", forbidden)
+					}
+				}
+				var c map[string]any
+				if err = json.Unmarshal(single, &c); err != nil {
+					t.Fatal(err)
+				}
+				for _, value := range c["outbounds"].([]any) {
+					ob := value.(map[string]any)
+					if _, isNode := ob["server"]; isNode {
+						if _, hasDetour := ob["detour"]; hasDetour {
+							t.Fatal("single-pool node still chains through another outbound")
+						}
+					}
+				}
+				if mode == "outbounds" && len(c) != 1 {
+					t.Fatal("single fragment includes runtime settings")
+				}
+				if dir := os.Getenv("NODECTL_SINGBOX_FIXTURES"); dir != "" && mode != "outbounds" {
+					name := fmt.Sprintf("1.%d-single-mobile.json", minor)
+					if mode == "full" {
+						name = fmt.Sprintf("1.%d-single.json", minor)
+						for _, value := range c["route"].(map[string]any)["rule_set"].([]any) {
+							set := value.(map[string]any)
+							tag := set["tag"]
+							for key := range set {
+								delete(set, key)
+							}
+							set["tag"], set["type"], set["format"], set["path"] = tag, "local", "binary", filepath.Join(dir, "rules.srs")
+						}
+						single, _ = json.MarshalIndent(c, "", "  ")
+					}
+					if err = os.WriteFile(filepath.Join(dir, name), single, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 		})
 	}

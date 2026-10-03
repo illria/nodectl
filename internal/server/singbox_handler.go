@@ -23,6 +23,11 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	coreVersion, mode := r.URL.Query().Get("version"), r.URL.Query().Get("mode")
+	topology, err := service.ParseSubscriptionTopology(r.URL.Query().Get("topology"))
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
 	if _, err := service.SingBoxMinor(coreVersion); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -37,7 +42,7 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 	if name.Value == "" {
 		name.Value = "NodeCTL"
 	}
-	data, warnings, err := service.GenerateSingBoxConfig(getBaseURL(r), r.URL.Query().Get("token"), coreVersion, mode, flag.Value != "false")
+	data, warnings, err := service.GenerateSingBoxConfigWithTopology(getBaseURL(r), r.URL.Query().Get("token"), coreVersion, mode, flag.Value != "false", topology)
 	if err != nil {
 		http.Error(w, err.Error(), 422)
 		return
@@ -45,6 +50,7 @@ func apiSubSingBox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("X-NodeCTL-Version", version.Version)
+	w.Header().Set("X-NodeCTL-Topology", string(topology))
 	w.Header().Set("X-NodeCTL-Skipped-Nodes", strconv.Itoa(len(warnings)))
 	w.Header().Set("profile-title", name.Value)
 	if info := service.GetSubscriptionUserinfo(); info != "" {

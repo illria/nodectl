@@ -205,9 +205,20 @@ func contains(slice []string, item string) bool {
 
 // GenerateV2RaySubBase64 生成通用 Base64 订阅 (包含中转和落地)
 func GenerateV2RaySubBase64(useFlag bool) (string, error) {
+	return GenerateV2RaySubBase64WithTopology(useFlag, TopologyChain)
+}
+
+func GenerateV2RaySubBase64WithTopology(useFlag bool, topology SubscriptionTopology) (string, error) {
+	if _, err := ParseSubscriptionTopology(string(topology)); err != nil {
+		return "", err
+	}
+	routingTypes := []int{1, 2}
+	if topology == TopologySingle {
+		routingTypes = []int{2}
+	}
 	var nodes []database.NodePool
 	// 取出中转(1)和落地(2)的节点，排除被禁用的
-	if err := database.DB.Where("routing_type IN ? AND is_blocked = ?", []int{1, 2}, false).
+	if err := database.DB.Where("routing_type IN ? AND is_blocked = ?", routingTypes, false).
 		Order("sort_index ASC").Find(&nodes).Error; err != nil {
 		logger.Log.Error("从数据库获取全量聚合节点失败", "error", err)
 		return "", err
@@ -304,7 +315,7 @@ func GenerateV2RaySubBase64(useFlag bool) (string, error) {
 	// 注入机场订阅节点 (Airport Nodes)
 	var airportNodes []database.AirportNode
 	// 获取所有启用的机场节点 (包括中转1 和 落地2)
-	if err := database.DB.Where("routing_type IN ?", []int{1, 2}).
+	if err := database.DB.Where("routing_type IN ?", routingTypes).
 		Order("sub_id, original_index ASC").Find(&airportNodes).Error; err == nil {
 
 		for _, anode := range airportNodes {
@@ -319,7 +330,7 @@ func GenerateV2RaySubBase64(useFlag bool) (string, error) {
 
 	// 注入自定义节点 (Custom Nodes) - V2Ray 订阅中，只要不是屏蔽(0)的都加入
 	var customNodes []database.CustomNode
-	if err := database.DB.Where("routing_type IN ?", []int{1, 2}).
+	if err := database.DB.Where("routing_type IN ?", routingTypes).
 		Order("created_at ASC").Find(&customNodes).Error; err == nil {
 
 		for _, cnode := range customNodes {
