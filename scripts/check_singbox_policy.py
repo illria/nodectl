@@ -13,6 +13,7 @@ from pathlib import Path
 import select
 import socket
 import socketserver
+import ssl
 import struct
 import subprocess
 import tempfile
@@ -36,35 +37,56 @@ class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
 
+def dns_response(server, query):
+    offset, labels = 12, []
+    while query[offset]:
+        length = query[offset]
+        labels.append(query[offset + 1:offset + 1 + length].decode())
+        offset += length + 1
+    end = offset + 5
+    name = '.'.join(labels).lower()
+    kind = struct.unpack('!H', query[offset + 1:offset + 3])[0]
+    server.queries.append(name)
+    server.questions.append((name, kind))
+    answer = b''
+    if kind == 1:
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', 1, 1, 60, 4) + socket.inet_aton(server.answer)
+    elif kind == 28:
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', 28, 1, 60, 16) + socket.inet_pton(socket.AF_INET6, server.answer6)
+    elif kind in (64, 65):
+        # SVCB/HTTPS priority 1, root target, ipv6hint parameter.
+        data = b'\x00\x01\x00' + struct.pack('!HH', 6, 16) + socket.inet_pton(socket.AF_INET6, server.answer6)
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 60, len(data)) + data
+    return query[:2] + struct.pack('!HHHHH', 0x8180, 1, int(bool(answer)), 0, 0) + query[12:end] + answer
+
+
 class DNS(socketserver.BaseRequestHandler):
     def handle(self):
         self.request.settimeout(5)
         try:
             while True:
                 query = read_exact(self.request, struct.unpack('!H', read_exact(self.request, 2))[0])
-                offset, labels = 12, []
-                while query[offset]:
-                    length = query[offset]
-                    labels.append(query[offset + 1:offset + 1 + length].decode())
-                    offset += length + 1
-                end = offset + 5
-                name = '.'.join(labels).lower()
-                kind = struct.unpack('!H', query[offset + 1:offset + 3])[0]
-                self.server.queries.append(name)
-                self.server.questions.append((name, kind))
-                answer = b''
-                if kind == 1:
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', 1, 1, 60, 4) + socket.inet_aton(self.server.answer)
-                elif kind == 28:
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', 28, 1, 60, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
-                elif kind in (64, 65):
-                    # SVCB/HTTPS priority 1, root target, ipv6hint parameter.
-                    data = b'\x00\x01\x00' + struct.pack('!HH', 6, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 60, len(data)) + data
-                response = query[:2] + struct.pack('!HHHHH', 0x8180, 1, int(bool(answer)), 0, 0) + query[12:end] + answer
+                response = dns_response(self.server, query)
                 self.request.sendall(struct.pack('!H', len(response)) + response)
         except (EOFError, OSError):
             pass
+
+
+class DoH(http.server.BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
+    def do_POST(self):
+        assert self.path == '/dns-query', self.path
+        query = self.rfile.read(int(self.headers['Content-Length']))
+        response = dns_response(self.server.mock, query)
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/dns-message')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
+    def log_message(self, *unused):
+        pass
 
 
 class Website(http.server.BaseHTTPRequestHandler):
@@ -127,7 +149,10 @@ def socks_connection(port, host, destination_port, payload):
         try:
             address = b'\x01' + socket.inet_aton(host)
         except OSError:
-            address = b'\x03' + bytes([len(host)]) + host.encode()
+            try:
+                address = b'\x04' + socket.inet_pton(socket.AF_INET6, host)
+            except OSError:
+                address = b'\x03' + bytes([len(host)]) + host.encode()
         # Complete standard SOCKS negotiation before sending application data.
         connection.sendall(b'\x05\x01\x00' + address + struct.pack('!H', destination_port))
         reply = read_exact(connection, 4)
@@ -159,9 +184,16 @@ def dns_query(port, host, kind=1):
     return socket.inet_ntop(socket.AF_INET6 if ipv6 else socket.AF_INET, response[-16:] if ipv6 else response[-4:])
 
 
-def visit(port, host, website_port):
+def visit(port, host, website_port, destination=None, tls=False):
     payload = f'GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n'.encode()
-    with socks_connection(port, host, website_port, payload) as connection:
+    with contextlib.ExitStack() as stack:
+        connection = stack.enter_context(socks_connection(port, destination or host, website_port, b'' if tls else payload))
+        if tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            connection = stack.enter_context(context.wrap_socket(connection, server_hostname=host))
+            connection.sendall(payload)
         response = b''
         while b'policy-ok' not in response:
             response += read_exact(connection, 1)
@@ -171,6 +203,7 @@ def visit(port, host, website_port):
 parser = argparse.ArgumentParser()
 parser.add_argument('--core', required=True)
 parser.add_argument('--fixture', required=True)
+parser.add_argument('--without-destination-recovery', action='store_true', help='Reproduce the pre-fix cached IPv6 failure on a legacy core')
 args = parser.parse_args()
 fixture = Path(args.fixture)
 config = json.loads(fixture.read_text())
@@ -194,7 +227,22 @@ try:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         port, controller = unused_port(), unused_port()
-        config['inbounds'] = [{'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}]
+        tun = next(i for i in config['inbounds'] if i['type'] == 'tun')
+        inbound = {'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}
+        for key in ['sniff', 'sniff_override_destination']:
+            if key in tun:
+                inbound[key] = tun[key]
+        if args.without_destination_recovery:
+            assert minor <= 12 and config['dns']['strategy'] == 'ipv4_only'
+            inbound.pop('sniff_override_destination', None)
+        config['inbounds'] = [inbound]
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=policy.test', '-keyout', str(root / 'key.pem'), '-out', str(root / 'cert.pem')], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tls_website = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Website)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(root / 'cert.pem', root / 'key.pem')
+        tls_website.socket = context.wrap_socket(tls_website.socket, server_side=True)
+        servers.append(start(tls_website))
+        proxy.allowed_ports.add(tls_website.server_port)
         config['log'] = {'level': 'debug'}
         config['route']['auto_detect_interface'] = False
         (root / 'empty-domain.json').write_text('{"version":1,"rules":[{"domain":["unused-fixture.invalid"]}]}')
@@ -229,7 +277,15 @@ try:
             server['tag'] = tag
             mock = remote if tag == 'dns-remote' else direct
             if minor >= 12:
-                server.update(type='tcp', server='127.0.0.1', server_port=mock.server_address[1])
+                # Use the production DoH transport. Native 1.14 TCP DNS starts
+                # a connection-reuse probe with its own A/AAAA questions, which
+                # bypasses DNS family policy and makes TCP mock counts race.
+                doh = http.server.ThreadingHTTPServer(('127.0.0.1', 0), DoH)
+                doh.mock = mock
+                doh.socket = context.wrap_socket(doh.socket, server_side=True)
+                servers.append(start(doh))
+                proxy.allowed_ports.add(doh.server_port)
+                server.update(type='https', server='127.0.0.1', server_port=doh.server_port, tls={'enabled': True, 'insecure': True})
             else:
                 server['address'] = f'tcp://127.0.0.1:{mock.server_address[1]}'
             if tag == 'dns-remote':
@@ -275,6 +331,25 @@ try:
                 domestic = ['lf3-cdn-tos.bytecdntp.com', 'i0.hdslb.com', 'res.wx.qq.com', 'g.alicdn.com', 'domestic-module.test']
                 for host in domestic:
                     check(host, direct.answer, False)
+                if minor <= 12 and config['dns']['strategy'] == 'ipv4_only':
+                    # The phone can pass a cached/HTTPDNS IPv6 literal even
+                    # after DNS AAAA suppression. Host/SNI must restore a
+                    # domain, and the direct dialer must use an A answer.
+                    for tls in [False, True]:
+                        website_port = tls_website.server_port if tls else website.server_port
+                        for host in domestic:
+                            before = len(proxy.connections)
+                            if args.without_destination_recovery:
+                                try:
+                                    visit(port, host, website_port, destination='2001:db8::100', tls=tls)
+                                except (EOFError, OSError):
+                                    pass
+                                else:
+                                    raise AssertionError('Literal IPv6 unexpectedly works without domain recovery')
+                            else:
+                                visit(port, host, website_port, destination='2001:db8::100', tls=tls)
+                            assert len(proxy.connections) == before, (host, 'IPv6 recovery crossed proxy')
+                    print('Reproduced cached literal IPv6 failure without destination recovery' if args.without_destination_recovery else 'Cached literal IPv6 + HTTP Host/TLS SNI recovered to IPv4 DIRECT on legacy core')
                 check('unmatched-overseas.test', remote.answer, True)
                 assert 'unmatched-overseas.test' not in direct.queries, 'Overseas DNS leaked to domestic resolver'
                 mode('Global')

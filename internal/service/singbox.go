@@ -266,8 +266,15 @@ func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNo
 		// Native internal lookups can override the DNS default strategy. Match
 		// node bootstrap resolution to the selected family explicitly.
 		for _, ob := range out {
-			if _, ok := ob["domain_resolver"]; ok {
+			_, hasResolver := ob["domain_resolver"]
+			if hasResolver || ob["type"] == "direct" {
 				ob["domain_resolver"] = sbObject{"server": "dns-bootstrap", "strategy": "ipv4_only"}
+			}
+		}
+	} else if minor < 12 && ipMode == SingBoxIPv4Only {
+		for _, ob := range out {
+			if ob["type"] == "direct" {
+				ob["domain_strategy"] = "ipv4_only"
 			}
 		}
 	}
@@ -436,7 +443,16 @@ func buildSingBoxConfigWithIPMode(p *singBoxProfile, pools map[string][]*ClashNo
 		tun["inet6_address"] = []string{"fdfe:dcba:9876::1/126"}
 	}
 	mixed := sbObject{"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 7890}
-	if minor < 11 {
+	// Legacy sniffing is the only supported way in these cores to replace a
+	// cached literal IP with the HTTP Host/TLS SNI before the direct dialer
+	// performs IPv4 resolution. Modern sniff actions only annotate the domain;
+	// the legacy inbound fields are rejected starting with 1.13.
+	if ipMode == SingBoxIPv4Only && minor <= 12 {
+		mixed["sniff"] = true
+		mixed["sniff_override_destination"] = true
+		tun["sniff"] = true
+		tun["sniff_override_destination"] = true
+	} else if minor < 11 {
 		mixed["sniff"] = true
 		tun["sniff"] = true
 	} else {

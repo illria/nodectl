@@ -2,7 +2,7 @@
 
 > 本仓库为 **illria 独立维护版**，基于上游 `hobin66/nodectl` 持续维护。面板安装、GitHub Release、Docker 镜像与后续版本均由 `illria/nodectl` 独立发布。
 >
-> 当前准备版本：**`v0.4.76-custom.16`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
+> 当前准备版本：**`v0.4.76-custom.17`** ｜ Release：<https://github.com/illria/nodectl/releases/latest>
 
 > 一个轻量、高效、功能强大的个人节点与订阅管理面板
 
@@ -139,7 +139,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 >
 > 请使用 `illria/nodectl` 的 Release、GHCR 镜像和安装脚本，不要再使用 `hobin66/nodectl` 的安装地址。
 >
-> 当前准备版本为 `v0.4.76-custom.16`；当前稳定版为 `v0.4.76-custom.16`。
+> 当前准备版本为 `v0.4.76-custom.17`；当前稳定版为 `v0.4.76-custom.17`。
 
 写在前面：Tunnel 隧道原生支持 IPv4 和 IPv6。如果需要安装 Agent，建议优先使用 Tunnel 域名。
 
@@ -148,7 +148,7 @@ NodeCtl 采用 **Agent + 中心面板** 架构，为你的节点提供强大的�
 先拉取当前稳定镜像：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.16
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.17
 ```
 
 启动：
@@ -163,7 +163,7 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.16
+  ghcr.io/illria/nodectl:v0.4.76-custom.17
 ```
 
 访问：
@@ -191,7 +191,7 @@ ghcr.io/illria/nodectl:latest
 ```yaml
 services:
   nodectl:
-    image: ghcr.io/illria/nodectl:v0.4.76-custom.16
+    image: ghcr.io/illria/nodectl:v0.4.76-custom.17
     container_name: nodectl
     restart: unless-stopped
     ports:
@@ -288,11 +288,15 @@ nodectl-agent-linux-arm64-v0.2.77.sha256
 
 订阅分发中心新增 **sing-box** 卡片，默认“手机完整 VPN”，可选择实际内核的 1.8～1.14 系列以及配置形式。`custom.12` 修复大规则表的高内存问题，`custom.13` 补齐手机客户端 Rule / Global / Direct 模式。
 
-`custom.16` 修复 Wi-Fi 没有可用 IPv6 路由时的国内直连失败：**手机完整配置默认仅 IPv4 网站地址解析**。此前的 `prefer_ipv4` 仍会返回 AAAA 地址；新版使用 `ipv4_only`，并对 HTTPS/SVCB 查询返回空响应，避免旧内核从 IPv6 地址提示中再次选择不可达地址。网站继续通过 A 记录连接，国内直连和国外代理规则保持原有行为。
+`custom.16` 将**手机完整配置默认网站 DNS 解析设为仅 IPv4**，并对 AAAA、HTTPS/SVCB 查询返回空响应。这个设置控制订阅 DNS 返回的地址，不能把应用缓存或 HTTPDNS 已取得的 IPv6 字面地址转换为 IPv4。
+
+`custom.17` 补齐“🇨🇳 大陆”直连出口的 IPv4 内部解析。实际内核为 **1.8～1.12**、完整配置选择仅 IPv4 时，还会启用旧版嗅探目的地址恢复：应用向一个 IPv6 地址发起 HTTP/TLS 请求，且请求带有可识别的 HTTP Host / TLS SNI 时，将目的地址恢复为该域名并通过国内加密 DNS 重新解析为 IPv4。国内策略组继续默认直连，不添加中转或自动改用代理。
+
+**1.13 / 1.14 已移除这项旧版入站功能，不能通过只加 `sniff_override_destination` 或 `override_destination` 修复。**这些内核的 IPv4 DNS 仍生效，但不保证恢复应用自己的 IPv6 地址。需要此兼容功能时，先使用支持的 1.11 / 1.12 实际内核，再选择匹配版本重新生成完整订阅；只切换订阅模板不能切换客户端内核。无可识别域名、ECH 隐藏域名或仅有 IPv6 地址的目标不能靠域名恢复修复。更新订阅后重启 VPN，并清理应用原有连接缓存。
 
 在订阅分发中心的 sing-box 卡片中，可选“网站地址解析 → 仅 IPv4（推荐）”或“IPv4 / IPv6 双栈”。对应参数为 `ip=ipv4` / `ip=dual`；未指定时手机配置（包括默认 `mode`）使用 IPv4，桌面完整配置保持原有双栈。仅 IPv4 无法访问只有 IPv6 地址的网站；网络支持 IPv6 时可选双栈。此选项控制完整配置的 DNS，不改写显式 IPv6 节点地址，outbounds 片段不携带 DNS 设置。
 
-TUN 继续接管 IPv4/IPv6，避免通过删除 IPv6 接管产生绕行。更新完整手机订阅后需停止并重启 VPN；浏览器或应用仍使用旧 IPv6 地址时，请关闭后重新打开应用。CI 用八个真实内核验证 IPv4/双栈的 A、AAAA、HTTPS、SVCB 响应，以及国内/国外的路由和 DNS 出口。
+TUN 继续接管 IPv4/IPv6，避免通过删除 IPv6 接管产生绕行。更新完整手机订阅后需停止并重启 VPN；浏览器或应用仍使用旧 IPv6 地址时，请关闭后重新打开应用。CI 用八个真实内核验证 IPv4/双栈的 A、AAAA、HTTPS、SVCB 响应，以及国内/国外的路由和 DNS 出口；1.8～1.12 另测 IPv6 字面地址连接中的 HTTP Host / TLS SNI 恢复，并在 1.11.3 / 1.12.25 对照关闭恢复时的失败。
 
 仅 IPv4 模式也为新版内核的节点引导解析和默认直连域名解析显式指定 IPv4，避免内部 lookup 覆盖全局 DNS 策略；AAAA/HTTPS/SVCB 空响应规则优先于其他 DNS 规则。
 
@@ -322,7 +326,7 @@ TUN 继续接管 IPv4/IPv6，避免通过删除 IPv6 接管产生绕行。更新
 数据目录使用 `/opt/nodectl/data` 持久化时，可以直接替换容器，原有数据库和配置不会丢失：
 
 ```bash
-docker pull ghcr.io/illria/nodectl:v0.4.76-custom.16 && \
+docker pull ghcr.io/illria/nodectl:v0.4.76-custom.17 && \
 docker stop nodectl && \
 docker rm nodectl && \
 docker run -d \
@@ -332,14 +336,14 @@ docker run -d \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   -v /opt/nodectl/data:/app/data \
-  ghcr.io/illria/nodectl:v0.4.76-custom.16
+  ghcr.io/illria/nodectl:v0.4.76-custom.17
 ```
 
 ### 镜像 / Release 对应关系
 
 | 用途 | 地址 |
 |---|---|
-| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.16` |
+| 当前准备 Docker | `ghcr.io/illria/nodectl:v0.4.76-custom.17` |
 | 跟随 main | `ghcr.io/illria/nodectl:latest` |
 | 自定义通道 | `ghcr.io/illria/nodectl:custom` |
 | GitHub Release | `https://github.com/illria/nodectl/releases/latest` |

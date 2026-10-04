@@ -16,12 +16,13 @@ on:
       - feat/single-provider-v15
       - fix/singbox-ipv4-v16
       - fix/singbox-ipv4-v16-resolver
+      - fix/singbox-direct-v17
 
 permissions:
   contents: read
 
 env:
-  VERSION: v0.4.76-custom.16
+  VERSION: v0.4.76-custom.17
   AGENT_VERSION: v0.2.77
 
 concurrency:

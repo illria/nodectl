@@ -98,6 +98,9 @@ async function checkModal(width) {
                         assert.equal(document.getElementById('singBoxVersion').value, version);
                         assert.equal(document.getElementById('singBoxMode').value, mode);
                         assert.equal(document.getElementById('singBoxIPMode').value, ip);
+                        const familyStatus = document.getElementById('singBoxIPv4Compatibility').textContent;
+                        const expectedFamilyStatus = mode === 'outbounds' || ip === 'dual' ? '不改写' : Number(version.split('.')[1]) <= 12 ? '启用域名恢复' : '已移除域名恢复';
+                        assert(familyStatus.includes(expectedFamilyStatus), familyStatus);
                         const inspected = inspections.at(-1);
                         for (const key of ['version', 'mode', 'ip', 'topology', 'token']) {
                             assert.equal(inspected.searchParams.get(key), link.searchParams.get(key));

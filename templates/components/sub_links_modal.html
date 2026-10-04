@@ -711,7 +711,8 @@
                 <option value="ipv4" ${selectedSingBoxIPMode === 'ipv4' ? 'selected' : ''}>仅 IPv4（推荐，适合 IPv6 不通的网络）</option>
                 <option value="dual" ${selectedSingBoxIPMode === 'dual' ? 'selected' : ''}>IPv4 / IPv6 双栈（网络需支持 IPv6）</option>
             </select>
-            <div class="sub-right-desc">仅 IPv4 不返回 IPv6 网站地址，可避免没有 IPv6 路由时国内直连失败。TUN 仍接管双栈流量；配置片段不包含 DNS，此选项仅对完整配置生效。规则采用紧凑 SRS 格式以降低内存。1.11.2 建议更新至 1.11.3+。</div>
+            <div class="sub-right-desc">仅 IPv4 不返回 IPv6 DNS 地址。TUN 仍接管双栈流量；配置片段不包含 DNS，此选项仅对完整配置生效。规则采用紧凑 SRS 格式以降低内存。</div>
+            <div class="sub-right-desc" id="singBoxIPv4Compatibility">${selectedSingBoxMode === 'outbounds' || selectedSingBoxIPMode !== 'ipv4' ? '双栈和配置片段不改写应用的连接地址。' : Number(selectedSingBoxCore.split('.')[1]) <= 12 ? '此内核启用域名恢复：识别 HTTP Host / TLS SNI 后重新解析，帮助直连避开应用缓存的 IPv6 地址。无可识别域名的 IPv6 连接仍需要网络支持 IPv6。' : '1.13 / 1.14 已移除域名恢复选项。仅 IPv4 DNS 无法改写应用已缓存或自行获取的 IPv6 地址；请清理应用缓存。需要域名恢复时，先使用 1.11 / 1.12 内核，再生成匹配版本的订阅。'}</div>
             <div class="sub-right-desc" id="singBoxCompatibility" role="status" style="margin-top:10px"></div>
         ` : '';
 
