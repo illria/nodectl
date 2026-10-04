@@ -13,6 +13,7 @@ from pathlib import Path
 import select
 import socket
 import socketserver
+import ssl
 import struct
 import subprocess
 import tempfile
@@ -127,7 +128,10 @@ def socks_connection(port, host, destination_port, payload):
         try:
             address = b'\x01' + socket.inet_aton(host)
         except OSError:
-            address = b'\x03' + bytes([len(host)]) + host.encode()
+            try:
+                address = b'\x04' + socket.inet_pton(socket.AF_INET6, host)
+            except OSError:
+                address = b'\x03' + bytes([len(host)]) + host.encode()
         # Complete standard SOCKS negotiation before sending application data.
         connection.sendall(b'\x05\x01\x00' + address + struct.pack('!H', destination_port))
         reply = read_exact(connection, 4)
@@ -159,9 +163,16 @@ def dns_query(port, host, kind=1):
     return socket.inet_ntop(socket.AF_INET6 if ipv6 else socket.AF_INET, response[-16:] if ipv6 else response[-4:])
 
 
-def visit(port, host, website_port):
+def visit(port, host, website_port, destination=None, tls=False):
     payload = f'GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n'.encode()
-    with socks_connection(port, host, website_port, payload) as connection:
+    with contextlib.ExitStack() as stack:
+        connection = stack.enter_context(socks_connection(port, destination or host, website_port, b'' if tls else payload))
+        if tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            connection = stack.enter_context(context.wrap_socket(connection, server_hostname=host))
+            connection.sendall(payload)
         response = b''
         while b'policy-ok' not in response:
             response += read_exact(connection, 1)
@@ -171,6 +182,7 @@ def visit(port, host, website_port):
 parser = argparse.ArgumentParser()
 parser.add_argument('--core', required=True)
 parser.add_argument('--fixture', required=True)
+parser.add_argument('--without-destination-recovery', action='store_true', help='Reproduce the pre-fix cached IPv6 failure on a legacy core')
 args = parser.parse_args()
 fixture = Path(args.fixture)
 config = json.loads(fixture.read_text())
@@ -194,7 +206,22 @@ try:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         port, controller = unused_port(), unused_port()
-        config['inbounds'] = [{'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}]
+        tun = next(i for i in config['inbounds'] if i['type'] == 'tun')
+        inbound = {'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}
+        for key in ['sniff', 'sniff_override_destination']:
+            if key in tun:
+                inbound[key] = tun[key]
+        if args.without_destination_recovery:
+            assert minor <= 12 and config['dns']['strategy'] == 'ipv4_only'
+            inbound.pop('sniff_override_destination', None)
+        config['inbounds'] = [inbound]
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=policy.test', '-keyout', str(root / 'key.pem'), '-out', str(root / 'cert.pem')], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tls_website = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Website)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(root / 'cert.pem', root / 'key.pem')
+        tls_website.socket = context.wrap_socket(tls_website.socket, server_side=True)
+        servers.append(start(tls_website))
+        proxy.allowed_ports.add(tls_website.server_port)
         config['log'] = {'level': 'debug'}
         config['route']['auto_detect_interface'] = False
         (root / 'empty-domain.json').write_text('{"version":1,"rules":[{"domain":["unused-fixture.invalid"]}]}')
@@ -275,6 +302,25 @@ try:
                 domestic = ['lf3-cdn-tos.bytecdntp.com', 'i0.hdslb.com', 'res.wx.qq.com', 'g.alicdn.com', 'domestic-module.test']
                 for host in domestic:
                     check(host, direct.answer, False)
+                if minor <= 12 and config['dns']['strategy'] == 'ipv4_only':
+                    # The phone can pass a cached/HTTPDNS IPv6 literal even
+                    # after DNS AAAA suppression. Host/SNI must restore a
+                    # domain, and the direct dialer must use an A answer.
+                    for tls in [False, True]:
+                        website_port = tls_website.server_port if tls else website.server_port
+                        for host in domestic:
+                            before = len(proxy.connections)
+                            if args.without_destination_recovery:
+                                try:
+                                    visit(port, host, website_port, destination='2001:db8::100', tls=tls)
+                                except (EOFError, OSError):
+                                    pass
+                                else:
+                                    raise AssertionError('Literal IPv6 unexpectedly works without domain recovery')
+                            else:
+                                visit(port, host, website_port, destination='2001:db8::100', tls=tls)
+                            assert len(proxy.connections) == before, (host, 'IPv6 recovery crossed proxy')
+                    print('Reproduced cached literal IPv6 failure without destination recovery' if args.without_destination_recovery else 'Cached literal IPv6 + HTTP Host/TLS SNI recovered to IPv4 DIRECT on legacy core')
                 check('unmatched-overseas.test', remote.answer, True)
                 assert 'unmatched-overseas.test' not in direct.queries, 'Overseas DNS leaked to domestic resolver'
                 mode('Global')

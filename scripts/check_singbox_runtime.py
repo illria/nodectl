@@ -41,7 +41,12 @@ with tempfile.TemporaryDirectory() as directory:
     with socket.socket() as listener:
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
-    config['inbounds'] = [{'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}]
+    tun = next(i for i in config['inbounds'] if i['type'] == 'tun')
+    inbound = {'type': 'mixed', 'listen': '127.0.0.1', 'listen_port': port}
+    for key in ['sniff', 'sniff_override_destination']:
+        if key in tun:
+            inbound[key] = tun[key]
+    config['inbounds'] = [inbound]
     config['log'] = {'level': 'info', 'timestamp': False}
     config['route']['auto_detect_interface'] = False  # allow local test resource server
     for rule_set in config['route']['rule_set']:

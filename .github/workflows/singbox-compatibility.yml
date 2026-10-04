@@ -2,7 +2,7 @@ name: Sing-box Core Compatibility
 
 on:
   push:
-    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13, fix/singbox-cn-direct-v14, feat/single-provider-v15, fix/singbox-ipv4-v16, fix/singbox-ipv4-v16-resolver]
+    branches: [feat/singbox-subscriptions-v11, fix/singbox-ios-v12, fix/singbox-modes-v13, fix/singbox-cn-direct-v14, feat/single-provider-v15, fix/singbox-ipv4-v16, fix/singbox-ipv4-v16-resolver, fix/singbox-direct-v17]
   workflow_call:
 
 permissions:
@@ -43,5 +43,8 @@ jobs:
             "$RUNNER_TEMP/singbox-core/sing-box" check -c "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}.json"
             python3 scripts/check_singbox_runtime.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-mobile.json" --rules "$RUNNER_TEMP/singbox-fixtures/rules.srs" --large-rules "$RUNNER_TEMP/singbox-fixtures/cn.srs"
             python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-mobile.json"
+            if [ "$CORE_VERSION" = '1.11.3' ] || [ "$CORE_VERSION" = '1.12.25' ]; then
+              python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-mobile.json" --without-destination-recovery
+            fi
             python3 scripts/check_singbox_policy.py --core "$RUNNER_TEMP/singbox-core/sing-box" --fixture "$RUNNER_TEMP/singbox-fixtures/${CORE_MINOR}${PROFILE_SUFFIX}-dual-mobile.json"
           done

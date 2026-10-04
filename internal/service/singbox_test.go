@@ -91,6 +91,36 @@ func TestSingBoxIPModes(t *testing.T) {
 							t.Fatal("internal direct resolution still allows IPv6")
 						}
 					}
+					for _, value := range config["outbounds"].([]interface{}) {
+						ob := value.(map[string]interface{})
+						if ob["type"] != "direct" {
+							continue
+						}
+						if resolved != SingBoxIPv4Only {
+							if ob["domain_strategy"] != nil || ob["domain_resolver"] != nil {
+								t.Fatal("dual-stack direct forced to IPv4")
+							}
+						} else if minor < 12 {
+							if ob["domain_strategy"] != "ipv4_only" {
+								t.Fatal("legacy direct does not re-resolve recovered domain as IPv4")
+							}
+						} else {
+							resolver := ob["domain_resolver"].(map[string]interface{})
+							if resolver["server"] != "dns-bootstrap" || resolver["strategy"] != "ipv4_only" {
+								t.Fatal("native direct has wrong recovered-domain resolver")
+							}
+						}
+					}
+					for _, value := range config["inbounds"].([]interface{}) {
+						inbound := value.(map[string]interface{})
+						if minor <= 12 && resolved == SingBoxIPv4Only {
+							if inbound["sniff"] != true || inbound["sniff_override_destination"] != true {
+								t.Fatal("literal IP cannot recover HTTP Host/TLS SNI")
+							}
+						} else if inbound["sniff_override_destination"] != nil {
+							t.Fatal("destination override changed dual-stack mode or uses a removed field")
+						}
+					}
 					if !strings.Contains(string(data), "fdfe:dcba:9876::1/126") {
 						t.Fatal("IPv6 TUN capture removed")
 					}
