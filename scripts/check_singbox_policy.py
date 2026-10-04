@@ -37,35 +37,56 @@ class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
 
+def dns_response(server, query):
+    offset, labels = 12, []
+    while query[offset]:
+        length = query[offset]
+        labels.append(query[offset + 1:offset + 1 + length].decode())
+        offset += length + 1
+    end = offset + 5
+    name = '.'.join(labels).lower()
+    kind = struct.unpack('!H', query[offset + 1:offset + 3])[0]
+    server.queries.append(name)
+    server.questions.append((name, kind))
+    answer = b''
+    if kind == 1:
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', 1, 1, 60, 4) + socket.inet_aton(server.answer)
+    elif kind == 28:
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', 28, 1, 60, 16) + socket.inet_pton(socket.AF_INET6, server.answer6)
+    elif kind in (64, 65):
+        # SVCB/HTTPS priority 1, root target, ipv6hint parameter.
+        data = b'\x00\x01\x00' + struct.pack('!HH', 6, 16) + socket.inet_pton(socket.AF_INET6, server.answer6)
+        answer = b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 60, len(data)) + data
+    return query[:2] + struct.pack('!HHHHH', 0x8180, 1, int(bool(answer)), 0, 0) + query[12:end] + answer
+
+
 class DNS(socketserver.BaseRequestHandler):
     def handle(self):
         self.request.settimeout(5)
         try:
             while True:
                 query = read_exact(self.request, struct.unpack('!H', read_exact(self.request, 2))[0])
-                offset, labels = 12, []
-                while query[offset]:
-                    length = query[offset]
-                    labels.append(query[offset + 1:offset + 1 + length].decode())
-                    offset += length + 1
-                end = offset + 5
-                name = '.'.join(labels).lower()
-                kind = struct.unpack('!H', query[offset + 1:offset + 3])[0]
-                self.server.queries.append(name)
-                self.server.questions.append((name, kind))
-                answer = b''
-                if kind == 1:
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', 1, 1, 60, 4) + socket.inet_aton(self.server.answer)
-                elif kind == 28:
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', 28, 1, 60, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
-                elif kind in (64, 65):
-                    # SVCB/HTTPS priority 1, root target, ipv6hint parameter.
-                    data = b'\x00\x01\x00' + struct.pack('!HH', 6, 16) + socket.inet_pton(socket.AF_INET6, self.server.answer6)
-                    answer = b'\xc0\x0c' + struct.pack('!HHIH', kind, 1, 60, len(data)) + data
-                response = query[:2] + struct.pack('!HHHHH', 0x8180, 1, int(bool(answer)), 0, 0) + query[12:end] + answer
+                response = dns_response(self.server, query)
                 self.request.sendall(struct.pack('!H', len(response)) + response)
         except (EOFError, OSError):
             pass
+
+
+class DoH(http.server.BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
+    def do_POST(self):
+        assert self.path == '/dns-query', self.path
+        query = self.rfile.read(int(self.headers['Content-Length']))
+        response = dns_response(self.server.mock, query)
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/dns-message')
+        self.send_header('Content-Length', str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
+    def log_message(self, *unused):
+        pass
 
 
 class Website(http.server.BaseHTTPRequestHandler):
@@ -256,7 +277,15 @@ try:
             server['tag'] = tag
             mock = remote if tag == 'dns-remote' else direct
             if minor >= 12:
-                server.update(type='tcp', server='127.0.0.1', server_port=mock.server_address[1])
+                # Use the production DoH transport. Native 1.14 TCP DNS starts
+                # a connection-reuse probe with its own A/AAAA questions, which
+                # bypasses DNS family policy and makes TCP mock counts race.
+                doh = http.server.ThreadingHTTPServer(('127.0.0.1', 0), DoH)
+                doh.mock = mock
+                doh.socket = context.wrap_socket(doh.socket, server_side=True)
+                servers.append(start(doh))
+                proxy.allowed_ports.add(doh.server_port)
+                server.update(type='https', server='127.0.0.1', server_port=doh.server_port, tls={'enabled': True, 'insecure': True})
             else:
                 server['address'] = f'tcp://127.0.0.1:{mock.server_address[1]}'
             if tag == 'dns-remote':
